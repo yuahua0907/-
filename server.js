@@ -11,6 +11,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
+// 版本號：用 Render 自動注入的 commit hash，每次部署會變，前端偵測到就提示更新
+const APP_VERSION = (process.env.RENDER_GIT_COMMIT || '').slice(0, 7) || ('dev-' + Date.now());
+app.get('/api/version', (req, res) => res.json({ version: APP_VERSION }));
+
 // 多人版：X-User 是裝置 ID（隔離資料用），X-User-Name 是顯示名稱（給 AI 叫名字用）
 app.use('/api', (req, res, next) => {
   const u = (req.header('X-User') || '').trim();

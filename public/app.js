@@ -833,3 +833,54 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch((err) => console.warn('SW 註冊失敗', err));
   });
 }
+
+// ===== 自動偵測新版本 =====
+async function checkAppVersion() {
+  try {
+    const res = await fetch('/api/version', { cache: 'no-store' });
+    const j = await res.json();
+    if (!j.version) return;
+    const stored = localStorage.getItem('app_version');
+    if (!stored) {
+      localStorage.setItem('app_version', j.version);
+      return;
+    }
+    if (stored !== j.version && !document.getElementById('update-banner')) {
+      showUpdateBanner(j.version);
+    }
+  } catch {}
+}
+
+function showUpdateBanner(newVer) {
+  const banner = document.createElement('div');
+  banner.id = 'update-banner';
+  banner.innerHTML = `
+    <span>✨ 小健有更新囉！</span>
+    <button type="button" id="apply-update">立即套用</button>
+    <button type="button" id="dismiss-update" aria-label="關閉">✕</button>
+  `;
+  document.body.appendChild(banner);
+  document.getElementById('apply-update').addEventListener('click', async () => {
+    try {
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.update()));
+      }
+    } catch {}
+    localStorage.setItem('app_version', newVer);
+    location.reload();
+  });
+  document.getElementById('dismiss-update').addEventListener('click', () => {
+    banner.remove();
+  });
+}
+
+// 進場檢查 + 每 5 分鐘 + 從多工切回來時檢查
+window.addEventListener('load', checkAppVersion);
+setInterval(checkAppVersion, 5 * 60 * 1000);
+window.addEventListener('focus', checkAppVersion);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkAppVersion(); });
