@@ -1,3 +1,50 @@
+// ===== 多人版：使用者名稱管理 =====
+function getUser() {
+  return (localStorage.getItem('fitness_user') || '').trim();
+}
+function setUser(name) {
+  localStorage.setItem('fitness_user', name.trim());
+}
+function askForName(reason) {
+  let name = '';
+  while (!name) {
+    name = (window.prompt(`${reason}\n\n請輸入你的名字（例如：小明、Roy），\n之後資料會綁這個名字。\n同個裝置下次自動帶入，不用再輸入。`) || '').trim();
+    if (name && name.length <= 30) break;
+    if (name.length > 30) { alert('名字太長（最多 30 字），重來'); name = ''; }
+  }
+  setUser(name);
+  return name;
+}
+// 進場檢查
+if (!getUser()) askForName('👋 第一次來！');
+
+// 包一層 fetch：所有 /api/* 自動帶 X-User
+const _origFetch = window.fetch.bind(window);
+window.fetch = function(url, opts = {}) {
+  const isApi = typeof url === 'string' && url.startsWith('/api/');
+  if (isApi) {
+    const user = getUser() || askForName('需要輸入名字');
+    const headers = new Headers(opts.headers || {});
+    headers.set('X-User', user);
+    opts = { ...opts, headers };
+  }
+  return _origFetch(url, opts);
+};
+
+// 顯示目前使用者 + 切換按鈕
+window.addEventListener('DOMContentLoaded', () => {
+  const bar = document.createElement('div');
+  bar.id = 'user-bar';
+  bar.innerHTML = `<span>👤 <b id="user-name"></b></span><button id="switch-user" type="button">切換使用者</button>`;
+  document.body.insertBefore(bar, document.body.firstChild);
+  document.getElementById('user-name').textContent = getUser();
+  document.getElementById('switch-user').addEventListener('click', () => {
+    if (!confirm('切換使用者？目前的資料畫面會重新載入。')) return;
+    askForName('切換使用者');
+    location.reload();
+  });
+});
+
 // ===== INBODY：拍照辨識 / 手動 / 儲存 / 趨勢圖 =====
 const inbodyForm = document.getElementById('inbody-form');
 const saveMsg = document.getElementById('save-msg');

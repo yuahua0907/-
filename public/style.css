@@ -368,3 +368,30 @@ details[open] > summary { margin-bottom: 6px; }
   .quick-btns button { background: #2c2c2e; color: var(--ink-2); }
   .meal-item .nutrition span { background: #2c2c2e; color: var(--ink-2); }
 }
+
+/* ========== 多人版使用者列 ========== */
+#user-bar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, var(--brand), #5e5ce6);
+  color: #fff;
+  font-size: 14px;
+  box-shadow: 0 2px 6px rgba(0,0,0,.15);
+}
+#user-bar b { font-weight: 700; }
+#user-bar button {
+  background: rgba(255,255,255,.2);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.4);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+#user-bar button:hover { background: rgba(255,255,255,.3); }

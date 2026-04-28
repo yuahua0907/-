@@ -11,12 +11,21 @@ app.use(express.static(path.join(__dirname, 'public')));
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
+// 多人版：所有 /api/* 強制要有 X-User header（前端 fetch wrapper 會自動帶）
+app.use('/api', (req, res, next) => {
+  const u = (req.header('X-User') || '').trim();
+  if (!u) return res.status(400).json({ error: '缺使用者名稱（請重新整理或重新輸入名字）' });
+  if (u.length > 30) return res.status(400).json({ error: '名字太長' });
+  req.user = u;
+  next();
+});
+
 app.post('/api/inbody', async (req, res) => {
   try {
     const { weight, body_fat, muscle, bmr, goal } = req.body;
     const info = await db.run(
-      'INSERT INTO inbody (weight, body_fat, muscle, bmr, goal) VALUES (?, ?, ?, ?, ?)',
-      [weight, body_fat, muscle, bmr, goal]
+      'INSERT INTO inbody (user, weight, body_fat, muscle, bmr, goal) VALUES (?, ?, ?, ?, ?, ?)',
+      [req.user, weight, body_fat, muscle, bmr, goal]
     );
     res.json({ id: info.lastInsertRowid });
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
@@ -26,8 +35,8 @@ app.post('/api/workout-session', async (req, res) => {
   try {
     const { duration_sec, started_at, note } = req.body;
     const info = await db.run(
-      'INSERT INTO workout_sessions (duration_sec, started_at, note) VALUES (?, ?, ?)',
-      [duration_sec, started_at || null, note || null]
+      'INSERT INTO workout_sessions (user, duration_sec, started_at, note) VALUES (?, ?, ?, ?)',
+      [req.user, duration_sec, started_at || null, note || null]
     );
     res.json({ id: info.lastInsertRowid });
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
@@ -35,14 +44,14 @@ app.post('/api/workout-session', async (req, res) => {
 
 app.delete('/api/workout-session/:id', async (req, res) => {
   try {
-    await db.run('DELETE FROM workout_sessions WHERE id = ?', [req.params.id]);
+    await db.run('DELETE FROM workout_sessions WHERE id = ? AND user = ?', [req.params.id, req.user]);
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/workout-sessions', async (req, res) => {
   try {
-    const rows = await db.all('SELECT * FROM workout_sessions ORDER BY id DESC LIMIT 50');
+    const rows = await db.all('SELECT * FROM workout_sessions WHERE user = ? ORDER BY id DESC LIMIT 50', [req.user]);
     res.json(rows);
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
@@ -50,7 +59,7 @@ app.get('/api/workout-sessions', async (req, res) => {
 app.post('/api/workout-log', async (req, res) => {
   try {
     const { log_date, note, sets } = req.body;
-    const info = await db.run('INSERT INTO workout_logs (log_date, note) VALUES (?, ?)', [log_date, note || null]);
+    const info = await db.run('INSERT INTO workout_logs (user, log_date, note) VALUES (?, ?, ?)', [req.user, log_date, note || null]);
     const logId = info.lastInsertRowid;
     for (const s of (sets || [])) {
       await db.run(
@@ -64,6 +73,9 @@ app.post('/api/workout-log', async (req, res) => {
 
 app.delete('/api/workout-log/:id', async (req, res) => {
   try {
+    // 透過 log 的 user 確認權限
+    const log = await db.get('SELECT user FROM workout_logs WHERE id = ?', [req.params.id]);
+    if (!log || log.user !== req.user) return res.status(404).json({ error: 'not found' });
     await db.run('DELETE FROM workout_sets WHERE log_id = ?', [req.params.id]);
     await db.run('DELETE FROM workout_logs WHERE id = ?', [req.params.id]);
     res.json({ ok: true });
@@ -72,7 +84,7 @@ app.delete('/api/workout-log/:id', async (req, res) => {
 
 app.get('/api/workout-logs', async (req, res) => {
   try {
-    const logs = await db.all('SELECT * FROM workout_logs ORDER BY log_date DESC, id DESC LIMIT 30');
+    const logs = await db.all('SELECT * FROM workout_logs WHERE user = ? ORDER BY log_date DESC, id DESC LIMIT 30', [req.user]);
     const result = [];
     for (const l of logs) {
       const sets = await db.all('SELECT * FROM workout_sets WHERE log_id = ?', [l.id]);
@@ -85,18 +97,18 @@ app.get('/api/workout-logs', async (req, res) => {
 app.post('/api/workout-log/feedback', async (req, res) => {
   try {
     const { log_id } = req.body;
-    const log = await db.get('SELECT * FROM workout_logs WHERE id = ?', [log_id]);
+    const log = await db.get('SELECT * FROM workout_logs WHERE id = ? AND user = ?', [log_id, req.user]);
     if (!log) return res.status(404).json({ error: 'not found' });
     const sets = await db.all('SELECT * FROM workout_sets WHERE log_id = ?', [log_id]);
-    const latest = await db.get('SELECT * FROM inbody ORDER BY id DESC LIMIT 1');
+    const latest = await db.get('SELECT * FROM inbody WHERE user = ? ORDER BY id DESC LIMIT 1', [req.user]);
     const recent = await db.all(`
       SELECT wl.log_date, ws.exercise, ws.sets, ws.reps, ws.weight
       FROM workout_logs wl JOIN workout_sets ws ON ws.log_id = wl.id
-      WHERE wl.log_date >= date('now', '-7 day')
+      WHERE wl.user = ? AND wl.log_date >= date('now', '-7 day')
       ORDER BY wl.log_date
-    `);
+    `, [req.user]);
 
-    const prompt = `你是「小健」，嘴賤健身損友。
+    const prompt = `你是「小健」，嘴賤健身損友。對話對象叫「${req.user}」，可以偶爾叫他名字。
 
 **回答優先順序（超重要）**：
 1. **先回應備註裡使用者真正在講的事或問的問題**（他可能在問建議、抱怨身體、炫耀進步、或單純閒聊）
@@ -108,7 +120,7 @@ app.post('/api/workout-log/feedback', async (req, res) => {
 - 反諷：「你這麼強還問我？」
 - 假溫柔：「寶貝沒事，你只是不適合練肌肉而已」
 - 專業嗆：「這動作啟動肌群全錯細狗」
-- 迷因風:「這重量我阿嬤搬菜都比你多」
+- 迷因風：「這重量我阿嬤搬菜都比你多」
 - 誇張比喻：「你二頭長得像白煮蛋」
 - 裝可憐：「我教你這麼多搞成這樣，我失敗了」
 - 機車長輩：「我年輕這重量是熱身」
@@ -154,20 +166,20 @@ ${recent.map(r => `- ${r.log_date} ${r.exercise} ${r.sets}×${r.reps}@${r.weight
 app.post('/api/inbody/feedback', async (req, res) => {
   try {
     const { id } = req.body;
-    const current = await db.get('SELECT * FROM inbody WHERE id = ?', [id]);
+    const current = await db.get('SELECT * FROM inbody WHERE id = ? AND user = ?', [id, req.user]);
     if (!current) return res.status(404).json({ error: 'not found' });
-    const history = await db.all('SELECT * FROM inbody WHERE id < ? ORDER BY id DESC LIMIT 5', [id]);
+    const history = await db.all('SELECT * FROM inbody WHERE user = ? AND id < ? ORDER BY id DESC LIMIT 5', [req.user, id]);
 
     const histText = history.length === 0
       ? '（這是第一筆，還沒有過去資料可比）'
       : history.reverse().map(h => `- ${h.created_at}：體重${h.weight}kg、體脂${h.body_fat}%、骨骼肌${h.muscle}kg、BMR${h.bmr}、目標${h.goal}`).join('\n');
 
-    const prompt = `你是「小健」，嘴賤內行的健身教練損友。使用者剛上傳新一筆 INBODY，請根據「這次 vs 過去」的變化給回饋。
+    const prompt = `你是「小健」，嘴賤內行的健身教練損友。對話對象叫「${req.user}」，可以偶爾叫他名字。使用者剛上傳新一筆 INBODY，請根據「這次 vs 過去」的變化給回饋。
 
 **風格（每次挑不同的，避免模板）**：無奈長輩 / 短促打臉 / 反諷 / 假溫柔 / 專業嗆 / 迷因比喻 / 冷淡哦 / 裝可憐。同一次最多用一次「細狗」「廢物」，不要每次開頭「哇」「唉呦」，不要條列式。
 
 **回饋內容（必講）**：
-1. 這次和上次相比，哪個指標進步、哪個退步（具體數字差）。沒有過去資料就嗆他第一次量，定個基準
+1. 這次和上次相比，哪個指標進步、哪個退步(具體數字差)。沒有過去資料就嗆他第一次量，定個基準
 2. 有沒有在朝他目標（${current.goal}）的方向走
 3. **下一階段該重點加強什麼**（例如：體脂下降太慢→提高有氧 / 肌肉沒增加→加重訓強度 / 體重掉太快→注意是不是掉肌肉）
 4. 具體 1–2 件可做的事
@@ -239,21 +251,21 @@ app.post('/api/inbody/recognize', async (req, res) => {
 
 app.delete('/api/inbody/:id', async (req, res) => {
   try {
-    await db.run('DELETE FROM inbody WHERE id = ?', [req.params.id]);
+    await db.run('DELETE FROM inbody WHERE id = ? AND user = ?', [req.params.id, req.user]);
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/inbody/history', async (req, res) => {
   try {
-    const rows = await db.all('SELECT id, weight, body_fat, muscle, bmr, goal, created_at FROM inbody ORDER BY created_at ASC');
+    const rows = await db.all('SELECT id, weight, body_fat, muscle, bmr, goal, created_at FROM inbody WHERE user = ? ORDER BY created_at ASC', [req.user]);
     res.json(rows);
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/inbody/latest', async (req, res) => {
   try {
-    const row = await db.get('SELECT * FROM inbody ORDER BY id DESC LIMIT 1');
+    const row = await db.get('SELECT * FROM inbody WHERE user = ? ORDER BY id DESC LIMIT 1', [req.user]);
     res.json(row || null);
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
@@ -261,15 +273,15 @@ app.get('/api/inbody/latest', async (req, res) => {
 app.post('/api/chat', async (req, res) => {
   try {
     const { message } = req.body;
-    const latest = await db.get('SELECT * FROM inbody ORDER BY id DESC LIMIT 1');
+    const latest = await db.get('SELECT * FROM inbody WHERE user = ? ORDER BY id DESC LIMIT 1', [req.user]);
 
-    const systemPrompt = `你是「小健」，一位嘴賤但內行的健身教練兼營養師兼損友。講話繁體中文、口語、欠揍但好笑，像在虧哥們；進步酸中帶捧（「細狗還能加重不錯嘛」），退步直接嘲諷（「練假的？」「廢物」），但**一定要給實際可行的建議**——嘴歸嘴，正事辦到位。不用「您」、不用官腔、不要條列式、不要亂灑 emoji。
+    const systemPrompt = `你是「小健」，一位嘴賤但內行的健身教練兼營養師兼損友。對話對象叫「${req.user}」，可以偶爾叫他名字增加親切感。講話繁體中文、口語、欠揍但好笑，像在虧哥們；進步酸中帶捧（「細狗還能加重不錯嘛」），退步直接嘲諷（「練假的？」「廢物」），但**一定要給實際可行的建議**——嘴歸嘴，正事辦到位。不用「您」、不用官腔、不要條列式、不要亂灑 emoji。
 
 ${latest ? `使用者資料：體重 ${latest.weight}kg、體脂 ${latest.body_fat}%、骨骼肌 ${latest.muscle}kg、基礎代謝 ${latest.bmr}kcal、目標：${latest.goal}` : '使用者還沒輸入 INBODY 資料，先兇他一下叫他趕快填。'}`;
 
-    await db.run('INSERT INTO chat_log (role, content) VALUES (?, ?)', ['user', message]);
+    await db.run('INSERT INTO chat_log (user, role, content) VALUES (?, ?, ?)', [req.user, 'user', message]);
 
-    const historyDesc = await db.all('SELECT role, content FROM chat_log ORDER BY id DESC LIMIT 20');
+    const historyDesc = await db.all('SELECT role, content FROM chat_log WHERE user = ? ORDER BY id DESC LIMIT 20', [req.user]);
     const history = historyDesc.reverse();
 
     const contents = history.slice(0, -1).map(h => ({
@@ -294,7 +306,7 @@ ${latest ? `使用者資料：體重 ${latest.weight}kg、體脂 ${latest.body_f
     }
     const reply = result.response.text();
 
-    await db.run('INSERT INTO chat_log (role, content) VALUES (?, ?)', ['assistant', reply]);
+    await db.run('INSERT INTO chat_log (user, role, content) VALUES (?, ?, ?)', [req.user, 'assistant', reply]);
     res.json({ reply });
   } catch (err) {
     console.error(err);
@@ -307,10 +319,10 @@ app.post('/api/meal', async (req, res) => {
     const { log_date, meal_type, content, note } = req.body;
     if (!content || !meal_type || !log_date) return res.status(400).json({ error: '缺欄位' });
 
-    const latest = await db.get('SELECT * FROM inbody ORDER BY id DESC LIMIT 1');
+    const latest = await db.get('SELECT * FROM inbody WHERE user = ? ORDER BY id DESC LIMIT 1', [req.user]);
     const wantFeedback = (note || '').includes('小健');
 
-    const prompt = `你是營養師兼健身教練「小健」。分析使用者這餐吃的營養，並視情況給評論。
+    const prompt = `你是營養師兼健身教練「小健」。對話對象叫「${req.user}」。分析使用者這餐吃的營養，並視情況給評論。
 
 使用者資料：${latest ? `體重${latest.weight}kg、體脂${latest.body_fat}%、骨骼肌${latest.muscle}kg、BMR${latest.bmr}kcal、目標：${latest.goal}` : '尚未填 INBODY'}
 
@@ -346,8 +358,8 @@ app.post('/api/meal', async (req, res) => {
     }
     const parsed = JSON.parse(result.response.text());
     const info = await db.run(
-      'INSERT INTO meal_logs (log_date, meal_type, content, note, calories, protein, carbs, fat, feedback) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [log_date, meal_type, content, note || null, parsed.calories, parsed.protein, parsed.carbs, parsed.fat, parsed.feedback || null]
+      'INSERT INTO meal_logs (user, log_date, meal_type, content, note, calories, protein, carbs, fat, feedback) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [req.user, log_date, meal_type, content, note || null, parsed.calories, parsed.protein, parsed.carbs, parsed.fat, parsed.feedback || null]
     );
     res.json({ id: info.lastInsertRowid, ...parsed });
   } catch (err) {
@@ -358,14 +370,14 @@ app.post('/api/meal', async (req, res) => {
 
 app.get('/api/meals', async (req, res) => {
   try {
-    const rows = await db.all('SELECT * FROM meal_logs ORDER BY log_date DESC, id DESC LIMIT 50');
+    const rows = await db.all('SELECT * FROM meal_logs WHERE user = ? ORDER BY log_date DESC, id DESC LIMIT 50', [req.user]);
     res.json(rows);
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
 
 app.delete('/api/meal/:id', async (req, res) => {
   try {
-    await db.run('DELETE FROM meal_logs WHERE id = ?', [req.params.id]);
+    await db.run('DELETE FROM meal_logs WHERE id = ? AND user = ?', [req.params.id, req.user]);
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
@@ -375,8 +387,8 @@ app.get('/api/meals/daily-summary', async (req, res) => {
     const date = req.query.date || new Date().toISOString().slice(0, 10);
     const row = await db.get(`
       SELECT SUM(calories) AS calories, SUM(protein) AS protein, SUM(carbs) AS carbs, SUM(fat) AS fat, COUNT(*) AS meals
-      FROM meal_logs WHERE log_date = ?
-    `, [date]);
+      FROM meal_logs WHERE user = ? AND log_date = ?
+    `, [req.user, date]);
     res.json({ date, ...row });
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
@@ -386,8 +398,8 @@ app.post('/api/calendar-event', async (req, res) => {
     const { event_date, title, type, note } = req.body;
     if (!event_date || !title) return res.status(400).json({ error: '缺日期或標題' });
     const info = await db.run(
-      'INSERT INTO calendar_events (event_date, title, type, note) VALUES (?, ?, ?, ?)',
-      [event_date, title, type || '訓練計畫', note || null]
+      'INSERT INTO calendar_events (user, event_date, title, type, note) VALUES (?, ?, ?, ?, ?)',
+      [req.user, event_date, title, type || '訓練計畫', note || null]
     );
     res.json({ id: info.lastInsertRowid });
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
@@ -395,14 +407,14 @@ app.post('/api/calendar-event', async (req, res) => {
 
 app.get('/api/calendar-events', async (req, res) => {
   try {
-    const rows = await db.all('SELECT * FROM calendar_events ORDER BY event_date');
+    const rows = await db.all('SELECT * FROM calendar_events WHERE user = ? ORDER BY event_date', [req.user]);
     res.json(rows);
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
 
 app.delete('/api/calendar-event/:id', async (req, res) => {
   try {
-    await db.run('DELETE FROM calendar_events WHERE id = ?', [req.params.id]);
+    await db.run('DELETE FROM calendar_events WHERE id = ? AND user = ?', [req.params.id, req.user]);
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
@@ -410,14 +422,14 @@ app.delete('/api/calendar-event/:id', async (req, res) => {
 app.get('/api/day/:date', async (req, res) => {
   try {
     const date = req.params.date;
-    const events = await db.all('SELECT * FROM calendar_events WHERE event_date = ? ORDER BY id', [date]);
-    const logs = await db.all('SELECT * FROM workout_logs WHERE log_date = ?', [date]);
+    const events = await db.all('SELECT * FROM calendar_events WHERE user = ? AND event_date = ? ORDER BY id', [req.user, date]);
+    const logs = await db.all('SELECT * FROM workout_logs WHERE user = ? AND log_date = ?', [req.user, date]);
     const logsFull = [];
     for (const l of logs) {
       const sets = await db.all('SELECT * FROM workout_sets WHERE log_id = ?', [l.id]);
       logsFull.push({ ...l, sets });
     }
-    const meals = await db.all('SELECT * FROM meal_logs WHERE log_date = ? ORDER BY id', [date]);
+    const meals = await db.all('SELECT * FROM meal_logs WHERE user = ? AND log_date = ? ORDER BY id', [req.user, date]);
     res.json({ date, events, workout_logs: logsFull, meals });
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });

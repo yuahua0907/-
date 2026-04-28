@@ -87,6 +87,11 @@ async function init() {
   // 漸進升級：舊 schema 沒 feedback 欄位的補上
   await ensureColumn('workout_logs', 'feedback', 'TEXT');
   await ensureColumn('inbody', 'feedback', 'TEXT');
+
+  // 多人版：每張資料表加 user 欄位（舊資料預設 'default'）
+  for (const t of ['inbody', 'chat_log', 'workout_sessions', 'workout_logs', 'calendar_events', 'meal_logs']) {
+    await ensureColumn(t, 'user', "TEXT NOT NULL DEFAULT 'default'");
+  }
 }
 
 async function ensureColumn(table, column, type) {
