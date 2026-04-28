@@ -11,12 +11,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
-// 多人版：所有 /api/* 強制要有 X-User header（前端 fetch wrapper 會自動帶）
+// 多人版：X-User 是裝置 ID（隔離資料用），X-User-Name 是顯示名稱（給 AI 叫名字用）
 app.use('/api', (req, res, next) => {
   const u = (req.header('X-User') || '').trim();
-  if (!u) return res.status(400).json({ error: '缺使用者名稱（請重新整理或重新輸入名字）' });
-  if (u.length > 30) return res.status(400).json({ error: '名字太長' });
+  if (!u) return res.status(400).json({ error: '缺裝置識別碼（請重新整理）' });
+  if (u.length > 100) return res.status(400).json({ error: '識別碼太長' });
   req.user = u;
+  req.userName = (req.header('X-User-Name') || '').trim().slice(0, 30) || '朋友';
   next();
 });
 
@@ -108,7 +109,7 @@ app.post('/api/workout-log/feedback', async (req, res) => {
       ORDER BY wl.log_date
     `, [req.user]);
 
-    const prompt = `你是「小健」，嘴賤健身損友。對話對象叫「${req.user}」，可以偶爾叫他名字。
+    const prompt = `你是「小健」，嘴賤健身損友。對話對象叫「${req.userName}」，可以偶爾叫他名字。
 
 **回答優先順序（超重要）**：
 1. **先回應備註裡使用者真正在講的事或問的問題**（他可能在問建議、抱怨身體、炫耀進步、或單純閒聊）
@@ -174,7 +175,7 @@ app.post('/api/inbody/feedback', async (req, res) => {
       ? '（這是第一筆，還沒有過去資料可比）'
       : history.reverse().map(h => `- ${h.created_at}：體重${h.weight}kg、體脂${h.body_fat}%、骨骼肌${h.muscle}kg、BMR${h.bmr}、目標${h.goal}`).join('\n');
 
-    const prompt = `你是「小健」，嘴賤內行的健身教練損友。對話對象叫「${req.user}」，可以偶爾叫他名字。使用者剛上傳新一筆 INBODY，請根據「這次 vs 過去」的變化給回饋。
+    const prompt = `你是「小健」，嘴賤內行的健身教練損友。對話對象叫「${req.userName}」，可以偶爾叫他名字。使用者剛上傳新一筆 INBODY，請根據「這次 vs 過去」的變化給回饋。
 
 **風格（每次挑不同的，避免模板）**：無奈長輩 / 短促打臉 / 反諷 / 假溫柔 / 專業嗆 / 迷因比喻 / 冷淡哦 / 裝可憐。同一次最多用一次「細狗」「廢物」，不要每次開頭「哇」「唉呦」，不要條列式。
 
@@ -290,7 +291,7 @@ app.get('/api/report/:range', async (req, res) => {
     const avgCal = meals.length > 0 ? Math.round(totalCal / new Set(meals.map(m => m.log_date)).size) : 0;
     const avgProtein = meals.length > 0 ? (totalProtein / new Set(meals.map(m => m.log_date)).size).toFixed(1) : 0;
 
-    const prompt = `你是「小健」，嘴賤健身教練損友。對話對象叫「${req.user}」。請寫一份「${label}總結」，給他看。
+    const prompt = `你是「小健」，嘴賤健身教練損友。對話對象叫「${req.userName}」。請寫一份「${label}總結」，給他看。
 
 **風格**：和平常一樣嘴賤但實用，每次挑不同酸法（無奈長輩 / 短促打臉 / 反諷 / 假溫柔 / 專業嗆 / 迷因 / 冷淡哦 / 裝可憐）。同一份報告最多用一次「細狗」「廢物」，不要每次開頭「哇」「唉呦」，不要官腔。
 
@@ -401,7 +402,7 @@ app.post('/api/chat', async (req, res) => {
     const { message } = req.body;
     const latest = await db.get('SELECT * FROM inbody WHERE user = ? ORDER BY id DESC LIMIT 1', [req.user]);
 
-    const systemPrompt = `你是「小健」，一位嘴賤但內行的健身教練兼營養師兼損友。對話對象叫「${req.user}」，可以偶爾叫他名字增加親切感。講話繁體中文、口語、欠揍但好笑，像在虧哥們；進步酸中帶捧（「細狗還能加重不錯嘛」），退步直接嘲諷（「練假的？」「廢物」），但**一定要給實際可行的建議**——嘴歸嘴，正事辦到位。不用「您」、不用官腔、不要條列式、不要亂灑 emoji。
+    const systemPrompt = `你是「小健」，一位嘴賤但內行的健身教練兼營養師兼損友。對話對象叫「${req.userName}」，可以偶爾叫他名字增加親切感。講話繁體中文、口語、欠揍但好笑，像在虧哥們；進步酸中帶捧（「細狗還能加重不錯嘛」），退步直接嘲諷（「練假的？」「廢物」），但**一定要給實際可行的建議**——嘴歸嘴，正事辦到位。不用「您」、不用官腔、不要條列式、不要亂灑 emoji。
 
 ${latest ? `使用者資料：體重 ${latest.weight}kg、體脂 ${latest.body_fat}%、骨骼肌 ${latest.muscle}kg、基礎代謝 ${latest.bmr}kcal、目標：${latest.goal}` : '使用者還沒輸入 INBODY 資料，先兇他一下叫他趕快填。'}`;
 
@@ -448,7 +449,7 @@ app.post('/api/meal', async (req, res) => {
     const latest = await db.get('SELECT * FROM inbody WHERE user = ? ORDER BY id DESC LIMIT 1', [req.user]);
     const wantFeedback = (note || '').includes('小健');
 
-    const prompt = `你是營養師兼健身教練「小健」。對話對象叫「${req.user}」。分析使用者這餐吃的營養，並視情況給評論。
+    const prompt = `你是營養師兼健身教練「小健」。對話對象叫「${req.userName}」。分析使用者這餐吃的營養，並視情況給評論。
 
 使用者資料：${latest ? `體重${latest.weight}kg、體脂${latest.body_fat}%、骨骼肌${latest.muscle}kg、BMR${latest.bmr}kcal、目標：${latest.goal}` : '尚未填 INBODY'}
 

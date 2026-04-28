@@ -1,46 +1,88 @@
-// ===== 多人版：使用者名稱管理 =====
-function getUser() {
-  return (localStorage.getItem('fitness_user') || '').trim();
+// ===== 多人版：裝置 ID + 顯示名稱 =====
+function getUid() { return (localStorage.getItem('fitness_uid') || '').trim(); }
+function getName() { return (localStorage.getItem('fitness_name') || '').trim(); }
+function setUid(v) { localStorage.setItem('fitness_uid', v.trim()); }
+function setName(v) { localStorage.setItem('fitness_name', v.trim()); }
+function genUid() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'u-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 }
-function setUser(name) {
-  localStorage.setItem('fitness_user', name.trim());
-}
-function askForName(reason) {
-  let name = '';
-  while (!name) {
-    name = (window.prompt(`${reason}\n\n請輸入你的名字（例如：小明、Roy），\n之後資料會綁這個名字。\n同個裝置下次自動帶入，不用再輸入。`) || '').trim();
-    if (name && name.length <= 30) break;
-    if (name.length > 30) { alert('名字太長（最多 30 字），重來'); name = ''; }
-  }
-  setUser(name);
-  return name;
-}
-// 進場檢查
-if (!getUser()) askForName('👋 第一次來！');
 
-// 包一層 fetch：所有 /api/* 自動帶 X-User
+// v1 → v2 自動遷移：把舊的「名字當 ID」升級成「真 UUID」但保留原資料
+(function migrateLegacy() {
+  const legacy = (localStorage.getItem('fitness_user') || '').trim();
+  if (!getUid() && legacy) {
+    setUid(legacy);   // 直接用舊名字當 ID 才能讀到舊資料
+    setName(legacy);
+    localStorage.removeItem('fitness_user');
+  }
+})();
+
+// 第一次來：產生 UID + 問顯示名稱
+function askName(reason) {
+  let n = '';
+  while (!n) {
+    n = (window.prompt(`${reason}\n\n顯示名稱（小健會這樣叫你，可重複、可改）：`) || '').trim();
+    if (n.length > 30) { alert('名字太長（最多 30 字）'); n = ''; }
+  }
+  setName(n);
+  return n;
+}
+if (!getUid()) {
+  setUid(genUid());
+  askName('👋 第一次來！');
+}
+
+// 所有 /api/* 自動帶兩個 header
 const _origFetch = window.fetch.bind(window);
 window.fetch = function(url, opts = {}) {
-  const isApi = typeof url === 'string' && url.startsWith('/api/');
-  if (isApi) {
-    const user = getUser() || askForName('需要輸入名字');
+  if (typeof url === 'string' && url.startsWith('/api/')) {
     const headers = new Headers(opts.headers || {});
-    headers.set('X-User', user);
+    headers.set('X-User', getUid());
+    headers.set('X-User-Name', getName() || '匿名');
     opts = { ...opts, headers };
   }
   return _origFetch(url, opts);
 };
 
-// 顯示目前使用者 + 切換按鈕
+// 使用者列 UI + 識別碼管理
 window.addEventListener('DOMContentLoaded', () => {
   const bar = document.createElement('div');
   bar.id = 'user-bar';
-  bar.innerHTML = `<span>👤 <b id="user-name"></b></span><button id="switch-user" type="button">切換使用者</button>`;
+  bar.innerHTML = `
+    <span>👤 <b id="user-name"></b></span>
+    <div class="user-bar-actions">
+      <button id="rename-user" type="button">改名</button>
+      <button id="show-uid" type="button">我的識別碼</button>
+      <button id="sync-uid" type="button">換裝置同步</button>
+    </div>
+  `;
   document.body.insertBefore(bar, document.body.firstChild);
-  document.getElementById('user-name').textContent = getUser();
-  document.getElementById('switch-user').addEventListener('click', () => {
-    if (!confirm('切換使用者？目前的資料畫面會重新載入。')) return;
-    askForName('切換使用者');
+
+  const refresh = () => { document.getElementById('user-name').textContent = getName() || '匿名'; };
+  refresh();
+
+  document.getElementById('rename-user').addEventListener('click', () => {
+    const cur = getName();
+    const n = (prompt('改顯示名稱（不會影響資料，只是小健叫你用的）：', cur) || '').trim();
+    if (n && n !== cur) { setName(n); refresh(); alert('改好了'); }
+  });
+
+  document.getElementById('show-uid').addEventListener('click', async () => {
+    const uid = getUid();
+    try {
+      await navigator.clipboard.writeText(uid);
+      alert('✅ 你的識別碼已複製到剪貼簿：\n\n' + uid + '\n\n換裝置時在新手機點「換裝置同步」貼上，資料就接得回來。建議存到 LINE 給自己 / 備忘錄。');
+    } catch {
+      prompt('複製這串識別碼，貼到備忘錄保存：\n（換裝置同步時要用）', uid);
+    }
+  });
+
+  document.getElementById('sync-uid').addEventListener('click', () => {
+    const cur = getUid();
+    const v = (prompt(`貼上你之前的識別碼來接回原本資料：\n（目前識別碼：${cur}）\n⚠️ 接回後這台裝置原本的「${getName() || '匿名'}」資料就看不到了，但其實在原本那組 ID 下不會消失。`, '') || '').trim();
+    if (!v || v === cur) return;
+    setUid(v);
     location.reload();
   });
 });
