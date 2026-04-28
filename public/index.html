@@ -153,6 +153,13 @@
       <label>吃了什麼（請含分量）
         <textarea id="meal-content" rows="2" required placeholder="例如：白飯 1 碗、雞胸肉 150g、青菜一盤、蛋 2 顆"></textarea>
       </label>
+      <div class="meal-photo-row">
+        <label class="photo-btn">
+          📷 拍照辨識食物
+          <input type="file" id="meal-photo" accept="image/*" capture="environment" hidden>
+        </label>
+        <span id="meal-photo-msg" class="hint"></span>
+      </div>
       <label>備註
         <textarea id="meal-note" rows="2" placeholder="例如：小健，今天吃太撐了"></textarea>
         <small class="hint">💡 備註寫「<b>小健</b>」兩字才會被他嘴；不寫就是單純記錄營養。</small>
@@ -202,6 +209,16 @@
         <div id="day-meals"></div>
       </div>
     </div>
+  </section>
+
+  <section class="card">
+    <h2>📊 小健週報 / 月報</h2>
+    <p class="hint">讓小健綜合看你最近的訓練、飲食、體重變化，給總結和下週建議。</p>
+    <div class="report-btn-row">
+      <button type="button" id="report-week" class="report-btn">看本週總結</button>
+      <button type="button" id="report-month" class="report-btn">看本月總結</button>
+    </div>
+    <div id="report-result" class="report-box" style="display:none;"></div>
   </section>
 
   <section class="card">

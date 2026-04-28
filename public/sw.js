@@ -1,4 +1,4 @@
-const CACHE = 'fitness-v1';
+const CACHE = 'fitness-v2';
 const ASSETS = [
   '/',
   '/index.html',
@@ -6,9 +6,7 @@ const ASSETS = [
   '/app.js',
   '/manifest.json',
   '/icon.svg',
-  '/icon-maskable.svg',
-  'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js',
-  'https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'
+  '/icon-maskable.svg'
 ];
 
 self.addEventListener('install', (e) => {
@@ -32,17 +30,34 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // API 請求一律走網路（AI / DB 不能用快取）
+  // API：一律走網路
   if (url.pathname.startsWith('/api/')) {
     e.respondWith(fetch(req).catch(() => new Response(JSON.stringify({ error: 'offline' }), { status: 503, headers: { 'Content-Type': 'application/json' } })));
     return;
   }
 
-  // 靜態資源：cache-first，背景更新
+  // 主檔案 (HTML/JS/CSS)：network-first，這樣使用者刷新就能拿到最新版
+  const isAppCore = url.origin === location.origin &&
+    (url.pathname === '/' || /\.(html|js|css)$/.test(url.pathname));
+
+  if (isAppCore) {
+    e.respondWith(
+      fetch(req).then((res) => {
+        if (res && res.status === 200) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, copy));
+        }
+        return res;
+      }).catch(() => caches.match(req))
+    );
+    return;
+  }
+
+  // 其他靜態（圖片、字型、CDN）：cache-first
   e.respondWith(
     caches.match(req).then((cached) => {
       const network = fetch(req).then((res) => {
-        if (res && res.status === 200 && (url.origin === location.origin || url.host.includes('jsdelivr'))) {
+        if (res && res.status === 200) {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy));
         }

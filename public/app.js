@@ -548,6 +548,67 @@ mealDateEl.addEventListener('change', loadDailySummary);
 loadDailySummary();
 loadMealHistory();
 
+// 飲食拍照辨識
+const mealPhoto = document.getElementById('meal-photo');
+const mealPhotoMsg = document.getElementById('meal-photo-msg');
+if (mealPhoto) {
+  mealPhoto.addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    mealPhotoMsg.textContent = '🔍 小健正在認你吃了什麼…';
+    mealPhotoMsg.style.color = '';
+    try {
+      const buf = await f.arrayBuffer();
+      let bin = ''; const bytes = new Uint8Array(buf);
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      const b64 = btoa(bin);
+      const res = await fetch('/api/meal/recognize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_base64: b64, mime_type: f.type || 'image/jpeg' })
+      });
+      const j = await res.json();
+      if (j.error) throw new Error(j.error);
+      const contentEl = document.getElementById('meal-content');
+      contentEl.value = j.content || '';
+      mealPhotoMsg.textContent = '✅ 已填入，可以再修改';
+      mealPhotoMsg.style.color = 'green';
+    } catch (err) {
+      mealPhotoMsg.textContent = '❌ 辨識失敗：' + err.message;
+      mealPhotoMsg.style.color = 'red';
+    } finally {
+      mealPhoto.value = '';
+    }
+  });
+}
+
+// 週報 / 月報
+async function loadReport(range) {
+  const box = document.getElementById('report-result');
+  box.style.display = 'block';
+  box.innerHTML = `<p>📊 小健正在整理${range === 'month' ? '本月' : '本週'}資料…(可能要 5~10 秒)</p>`;
+  try {
+    const res = await fetch('/api/report/' + range);
+    const j = await res.json();
+    if (j.error) throw new Error(j.error);
+    const s = j.stats || {};
+    box.innerHTML = `
+      <div class="report-stats">
+        <span>🏋️ 訓練 <b>${s.train_days}</b> 天</span>
+        <span>🍚 ${s.meal_count} 餐</span>
+        <span>📊 日均 ${s.avg_cal} kcal / ${s.avg_protein}g 蛋白</span>
+      </div>
+      <div class="report-summary">${(j.summary || '').replace(/\n/g, '<br>')}</div>
+    `;
+  } catch (err) {
+    box.innerHTML = `<p style="color:red;">❌ ${err.message}</p>`;
+  }
+}
+const reportWeek = document.getElementById('report-week');
+const reportMonth = document.getElementById('report-month');
+if (reportWeek) reportWeek.addEventListener('click', () => loadReport('week'));
+if (reportMonth) reportMonth.addEventListener('click', () => loadReport('month'));
+
 mealForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   mealMsg.textContent = '分析中…（約 3–5 秒）';

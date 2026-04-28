@@ -395,3 +395,70 @@ details[open] > summary { margin-bottom: 6px; }
   cursor: pointer;
 }
 #user-bar button:hover { background: rgba(255,255,255,.3); }
+
+/* ========== 飲食拍照 ========== */
+.meal-photo-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0;
+  flex-wrap: wrap;
+}
+.photo-btn {
+  display: inline-block;
+  padding: 8px 14px;
+  background: var(--brand-50);
+  color: var(--brand-dark);
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px dashed var(--brand);
+}
+.photo-btn:hover { background: var(--brand); color: #fff; }
+
+/* ========== 週報 / 月報 ========== */
+.report-btn-row {
+  display: flex;
+  gap: 10px;
+  margin: 10px 0;
+  flex-wrap: wrap;
+}
+.report-btn {
+  flex: 1;
+  min-width: 120px;
+  padding: 12px;
+  background: linear-gradient(135deg, var(--brand), #5e5ce6);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+}
+.report-btn:hover { filter: brightness(1.1); }
+.report-box {
+  margin-top: 12px;
+  padding: 14px;
+  background: #f7f9fc;
+  border-radius: 12px;
+  border-left: 4px solid var(--brand);
+}
+.report-stats {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 14px;
+  margin-bottom: 10px;
+  color: #555;
+}
+.report-stats b { color: var(--brand-dark); font-size: 16px; }
+.report-summary {
+  line-height: 1.7;
+  font-size: 15px;
+  color: #222;
+}
+@media (prefers-color-scheme: dark) {
+  .report-box { background: #1a1f2e; color: #eee; }
+  .report-summary { color: #eee; }
+  .report-stats { color: #aaa; }
+}

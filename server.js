@@ -209,6 +209,132 @@ ${histText}
   }
 });
 
+app.post('/api/meal/recognize', async (req, res) => {
+  try {
+    const { image_base64, mime_type } = req.body;
+    if (!image_base64) return res.status(400).json({ error: '缺圖片' });
+
+    const visionModel = genAI.getGenerativeModel({
+      model: 'gemini-2.5-flash-lite',
+      generationConfig: { responseMimeType: 'application/json' }
+    });
+
+    const prompt = `這是一張食物照片。請辨識照片裡的所有食物，估計分量，回 JSON：
+{"content": "食物 1 估計分量、食物 2 估計分量、..."}
+
+範例輸出："白飯 1 碗、滷雞腿 1 隻、滷蛋 1 顆、青江菜 半碗"
+
+要求：
+- 用繁體中文
+- 估計分量用常見單位（碗/份/隻/顆/片/g）
+- 不確定就講大概，例如「雞胸肉 約 150g」
+- 不要有任何 markdown 或 json 以外的字
+- 看不清楚或不是食物時 content 填「無法辨識，請手動輸入」`;
+
+    let result;
+    for (let i = 0; i < 3; i++) {
+      try {
+        result = await visionModel.generateContent([
+          { inlineData: { mimeType: mime_type || 'image/jpeg', data: image_base64 } },
+          { text: prompt }
+        ]);
+        break;
+      } catch (e) {
+        if (i === 2 || !String(e.message).match(/503|UNAVAILABLE/)) throw e;
+        await new Promise(r => setTimeout(r, 1500));
+      }
+    }
+    const parsed = JSON.parse(result.response.text());
+    res.json(parsed);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/report/:range', async (req, res) => {
+  try {
+    const range = req.params.range; // 'week' or 'month'
+    const days = range === 'month' ? 30 : 7;
+    const label = range === 'month' ? '本月' : '本週';
+
+    const inbody = await db.all(
+      `SELECT * FROM inbody WHERE user = ? AND created_at >= date('now', ?) ORDER BY created_at`,
+      [req.user, `-${days} day`]
+    );
+    const workouts = await db.all(`
+      SELECT wl.log_date, wl.note, ws.exercise, ws.sets, ws.reps, ws.weight
+      FROM workout_logs wl JOIN workout_sets ws ON ws.log_id = wl.id
+      WHERE wl.user = ? AND wl.log_date >= date('now', ?)
+      ORDER BY wl.log_date
+    `, [req.user, `-${days} day`]);
+    const meals = await db.all(
+      `SELECT log_date, meal_type, content, calories, protein, carbs, fat FROM meal_logs
+       WHERE user = ? AND log_date >= date('now', ?) ORDER BY log_date`,
+      [req.user, `-${days} day`]
+    );
+
+    const inbodyText = inbody.length === 0 ? '（無 INBODY 紀錄）' :
+      inbody.map(i => `- ${i.created_at?.slice(0, 10)}：${i.weight}kg / 體脂${i.body_fat}% / 肌肉${i.muscle}kg / 目標${i.goal}`).join('\n');
+
+    const workoutText = workouts.length === 0 ? '（無訓練紀錄）' :
+      workouts.map(w => `- ${w.log_date} ${w.exercise} ${w.sets}×${w.reps}@${w.weight}kg`).join('\n');
+
+    const trainDays = new Set(workouts.map(w => w.log_date)).size;
+
+    const mealText = meals.length === 0 ? '（無飲食紀錄）' :
+      meals.map(m => `- ${m.log_date} ${m.meal_type}：${m.content}（${m.calories}kcal、蛋白${m.protein}g）`).join('\n');
+
+    const totalCal = meals.reduce((s, m) => s + (m.calories || 0), 0);
+    const totalProtein = meals.reduce((s, m) => s + (m.protein || 0), 0);
+    const avgCal = meals.length > 0 ? Math.round(totalCal / new Set(meals.map(m => m.log_date)).size) : 0;
+    const avgProtein = meals.length > 0 ? (totalProtein / new Set(meals.map(m => m.log_date)).size).toFixed(1) : 0;
+
+    const prompt = `你是「小健」，嘴賤健身教練損友。對話對象叫「${req.user}」。請寫一份「${label}總結」，給他看。
+
+**風格**：和平常一樣嘴賤但實用，每次挑不同酸法（無奈長輩 / 短促打臉 / 反諷 / 假溫柔 / 專業嗆 / 迷因 / 冷淡哦 / 裝可憐）。同一份報告最多用一次「細狗」「廢物」，不要每次開頭「哇」「唉呦」，不要官腔。
+
+**結構（4 個段落，每段一兩句即可）**：
+① **狀態總評**：${label}整體在搞什麼，先嘴一句再講重點
+② **訓練面**：${days} 天裡訓練了 ${trainDays} 天，動作量、強度有沒有進步、缺什麼、哪天偷懶
+③ **飲食面**：${meals.length} 餐紀錄，平均日卡 ${avgCal}kcal、日蛋白 ${avgProtein}g，符不符合目標、哪餐不行
+④ **下${range === 'month' ? '個月' : '週'}建議**：具體 2~3 件可做的事（加重幾 kg、補多少蛋白、減哪餐）
+
+可以用 emoji 但不要灑，每段最多 1 個。
+
+---資料如下---
+
+📊 INBODY 變化（${label}）：
+${inbodyText}
+
+🏋️ 訓練紀錄（${label}，共 ${trainDays} 天有訓練）：
+${workoutText}
+
+🍚 飲食紀錄（${label}，共 ${meals.length} 餐）：
+${mealText}
+
+平均每日攝取：${avgCal}kcal / 蛋白質 ${avgProtein}g`;
+
+    let result;
+    for (let i = 0; i < 3; i++) {
+      try { result = await model.generateContent(prompt); break; }
+      catch (e) {
+        if (i === 2 || !String(e.message).match(/503|UNAVAILABLE/)) throw e;
+        await new Promise(r => setTimeout(r, 1500));
+      }
+    }
+    const summary = result.response.text();
+    res.json({
+      range,
+      summary,
+      stats: { train_days: trainDays, meal_count: meals.length, avg_cal: avgCal, avg_protein: Number(avgProtein), inbody_count: inbody.length }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/inbody/recognize', async (req, res) => {
   try {
     const { image_base64, mime_type } = req.body;
