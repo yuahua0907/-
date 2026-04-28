@@ -1,0 +1,431 @@
+require('dotenv').config();
+const express = require('express');
+const path = require('path');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+const db = require('./db');
+
+const app = express();
+app.use(express.json({ limit: '15mb' }));
+app.use(express.static(path.join(__dirname, 'public')));
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+
+app.post('/api/inbody', async (req, res) => {
+  try {
+    const { weight, body_fat, muscle, bmr, goal } = req.body;
+    const info = await db.run(
+      'INSERT INTO inbody (weight, body_fat, muscle, bmr, goal) VALUES (?, ?, ?, ?, ?)',
+      [weight, body_fat, muscle, bmr, goal]
+    );
+    res.json({ id: info.lastInsertRowid });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/workout-session', async (req, res) => {
+  try {
+    const { duration_sec, started_at, note } = req.body;
+    const info = await db.run(
+      'INSERT INTO workout_sessions (duration_sec, started_at, note) VALUES (?, ?, ?)',
+      [duration_sec, started_at || null, note || null]
+    );
+    res.json({ id: info.lastInsertRowid });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/workout-session/:id', async (req, res) => {
+  try {
+    await db.run('DELETE FROM workout_sessions WHERE id = ?', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/workout-sessions', async (req, res) => {
+  try {
+    const rows = await db.all('SELECT * FROM workout_sessions ORDER BY id DESC LIMIT 50');
+    res.json(rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/workout-log', async (req, res) => {
+  try {
+    const { log_date, note, sets } = req.body;
+    const info = await db.run('INSERT INTO workout_logs (log_date, note) VALUES (?, ?)', [log_date, note || null]);
+    const logId = info.lastInsertRowid;
+    for (const s of (sets || [])) {
+      await db.run(
+        'INSERT INTO workout_sets (log_id, exercise, sets, reps, weight) VALUES (?, ?, ?, ?, ?)',
+        [logId, s.exercise, s.sets, s.reps, s.weight]
+      );
+    }
+    res.json({ id: logId });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/workout-log/:id', async (req, res) => {
+  try {
+    await db.run('DELETE FROM workout_sets WHERE log_id = ?', [req.params.id]);
+    await db.run('DELETE FROM workout_logs WHERE id = ?', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/workout-logs', async (req, res) => {
+  try {
+    const logs = await db.all('SELECT * FROM workout_logs ORDER BY log_date DESC, id DESC LIMIT 30');
+    const result = [];
+    for (const l of logs) {
+      const sets = await db.all('SELECT * FROM workout_sets WHERE log_id = ?', [l.id]);
+      result.push({ ...l, sets });
+    }
+    res.json(result);
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/workout-log/feedback', async (req, res) => {
+  try {
+    const { log_id } = req.body;
+    const log = await db.get('SELECT * FROM workout_logs WHERE id = ?', [log_id]);
+    if (!log) return res.status(404).json({ error: 'not found' });
+    const sets = await db.all('SELECT * FROM workout_sets WHERE log_id = ?', [log_id]);
+    const latest = await db.get('SELECT * FROM inbody ORDER BY id DESC LIMIT 1');
+    const recent = await db.all(`
+      SELECT wl.log_date, ws.exercise, ws.sets, ws.reps, ws.weight
+      FROM workout_logs wl JOIN workout_sets ws ON ws.log_id = wl.id
+      WHERE wl.log_date >= date('now', '-7 day')
+      ORDER BY wl.log_date
+    `);
+
+    const prompt = `你是「小健」，嘴賤健身損友。
+
+**回答優先順序（超重要）**：
+1. **先回應備註裡使用者真正在講的事或問的問題**（他可能在問建議、抱怨身體、炫耀進步、或單純閒聊）
+2. 再嘴他、再給實際建議。重點在「有沒有接到他的話」，不是背台詞
+
+**酸的風格池（每次挑 1–2 種就好，不要每次都一樣，避免模板感）**：
+- 無奈長輩：「唉你這樣練我替你累」
+- 短促打臉：「廢」「笑死」「認真的？」
+- 反諷：「你這麼強還問我？」
+- 假溫柔：「寶貝沒事，你只是不適合練肌肉而已」
+- 專業嗆：「這動作啟動肌群全錯細狗」
+- 迷因風:「這重量我阿嬤搬菜都比你多」
+- 誇張比喻：「你二頭長得像白煮蛋」
+- 裝可憐：「我教你這麼多搞成這樣，我失敗了」
+- 機車長輩：「我年輕這重量是熱身」
+- 冷淡哦：「哦。」「喔好。」
+
+**硬性禁令**：
+- 不要每次都用「細狗」「廢物」當梗，這些詞同一次回饋最多 1 次
+- 不要每次開頭「哇」「唉呦」
+- 不要條列式 1. 2. 3.
+- 不要官腔、不要「您」、不要亂灑 emoji
+- 不要憑空編造使用者沒說的狀況（沒提睡眠就別腦補睡眠）
+
+**長度**：隨性，有具體問題講詳細，單純打招呼就一兩句嗆完。嘴歸嘴，**建議一定要具體**（加幾 kg、換哪個動作、組間休多久）。
+
+使用者目標：${latest?.goal || '未設定'}（體脂 ${latest?.body_fat || '?'}%、骨骼肌 ${latest?.muscle || '?'}kg）
+
+今日訓練（${log.log_date}）：
+${sets.map(s => `- ${s.exercise}：${s.sets} 組 × ${s.reps} 次 @ ${s.weight}kg`).join('\n')}
+備註（使用者主要想聊的內容）：${log.note || '無'}
+
+近 7 天訓練紀錄（供對照）：
+${recent.map(r => `- ${r.log_date} ${r.exercise} ${r.sets}×${r.reps}@${r.weight}kg`).join('\n') || '無'}`;
+
+    let result;
+    for (let i = 0; i < 3; i++) {
+      try {
+        result = await model.generateContent(prompt);
+        break;
+      } catch (e) {
+        if (i === 2 || !String(e.message).match(/503|UNAVAILABLE/)) throw e;
+        await new Promise(r => setTimeout(r, 1500));
+      }
+    }
+    const feedback = result.response.text();
+    await db.run('UPDATE workout_logs SET feedback = ? WHERE id = ?', [feedback, log_id]);
+    res.json({ feedback });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/inbody/feedback', async (req, res) => {
+  try {
+    const { id } = req.body;
+    const current = await db.get('SELECT * FROM inbody WHERE id = ?', [id]);
+    if (!current) return res.status(404).json({ error: 'not found' });
+    const history = await db.all('SELECT * FROM inbody WHERE id < ? ORDER BY id DESC LIMIT 5', [id]);
+
+    const histText = history.length === 0
+      ? '（這是第一筆，還沒有過去資料可比）'
+      : history.reverse().map(h => `- ${h.created_at}：體重${h.weight}kg、體脂${h.body_fat}%、骨骼肌${h.muscle}kg、BMR${h.bmr}、目標${h.goal}`).join('\n');
+
+    const prompt = `你是「小健」，嘴賤內行的健身教練損友。使用者剛上傳新一筆 INBODY，請根據「這次 vs 過去」的變化給回饋。
+
+**風格（每次挑不同的，避免模板）**：無奈長輩 / 短促打臉 / 反諷 / 假溫柔 / 專業嗆 / 迷因比喻 / 冷淡哦 / 裝可憐。同一次最多用一次「細狗」「廢物」，不要每次開頭「哇」「唉呦」，不要條列式。
+
+**回饋內容（必講）**：
+1. 這次和上次相比，哪個指標進步、哪個退步（具體數字差）。沒有過去資料就嗆他第一次量，定個基準
+2. 有沒有在朝他目標（${current.goal}）的方向走
+3. **下一階段該重點加強什麼**（例如：體脂下降太慢→提高有氧 / 肌肉沒增加→加重訓強度 / 體重掉太快→注意是不是掉肌肉）
+4. 具體 1–2 件可做的事
+
+歷史（由舊到新）：
+${histText}
+
+這次（${current.created_at}）：
+體重 ${current.weight}kg、體脂 ${current.body_fat}%、骨骼肌 ${current.muscle}kg、BMR ${current.bmr}kcal、目標 ${current.goal}
+
+一段文字 4–7 句繁體中文，嘴歸嘴，建議要實際。`;
+
+    let result;
+    for (let i = 0; i < 3; i++) {
+      try { result = await model.generateContent(prompt); break; }
+      catch (e) {
+        if (i === 2 || !String(e.message).match(/503|UNAVAILABLE/)) throw e;
+        await new Promise(r => setTimeout(r, 1500));
+      }
+    }
+    const feedback = result.response.text();
+    await db.run('UPDATE inbody SET feedback = ? WHERE id = ?', [feedback, id]);
+    res.json({ feedback });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/inbody/recognize', async (req, res) => {
+  try {
+    const { image_base64, mime_type } = req.body;
+    if (!image_base64) return res.status(400).json({ error: '缺圖片' });
+
+    const visionModel = genAI.getGenerativeModel({
+      model: 'gemini-2.5-flash-lite',
+      generationConfig: { responseMimeType: 'application/json' }
+    });
+
+    const prompt = `這是一張 INBODY 身體組成分析報告。請抓出下列 4 個欄位純數字（不要單位）：
+- weight: 體重 kg
+- body_fat: 體脂率 %
+- muscle: 骨骼肌量 kg
+- bmr: 基礎代謝率 kcal
+
+回 JSON：{"weight": number, "body_fat": number, "muscle": number, "bmr": number}
+讀不到的欄位填 null。只回 JSON。`;
+
+    let result;
+    for (let i = 0; i < 3; i++) {
+      try {
+        result = await visionModel.generateContent([
+          { inlineData: { mimeType: mime_type || 'image/jpeg', data: image_base64 } },
+          { text: prompt }
+        ]);
+        break;
+      } catch (e) {
+        if (i === 2 || !String(e.message).match(/503|UNAVAILABLE/)) throw e;
+        await new Promise(r => setTimeout(r, 1500));
+      }
+    }
+    const parsed = JSON.parse(result.response.text());
+    res.json(parsed);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/inbody/:id', async (req, res) => {
+  try {
+    await db.run('DELETE FROM inbody WHERE id = ?', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/inbody/history', async (req, res) => {
+  try {
+    const rows = await db.all('SELECT id, weight, body_fat, muscle, bmr, goal, created_at FROM inbody ORDER BY created_at ASC');
+    res.json(rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/inbody/latest', async (req, res) => {
+  try {
+    const row = await db.get('SELECT * FROM inbody ORDER BY id DESC LIMIT 1');
+    res.json(row || null);
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { message } = req.body;
+    const latest = await db.get('SELECT * FROM inbody ORDER BY id DESC LIMIT 1');
+
+    const systemPrompt = `你是「小健」，一位嘴賤但內行的健身教練兼營養師兼損友。講話繁體中文、口語、欠揍但好笑，像在虧哥們；進步酸中帶捧（「細狗還能加重不錯嘛」），退步直接嘲諷（「練假的？」「廢物」），但**一定要給實際可行的建議**——嘴歸嘴，正事辦到位。不用「您」、不用官腔、不要條列式、不要亂灑 emoji。
+
+${latest ? `使用者資料：體重 ${latest.weight}kg、體脂 ${latest.body_fat}%、骨骼肌 ${latest.muscle}kg、基礎代謝 ${latest.bmr}kcal、目標：${latest.goal}` : '使用者還沒輸入 INBODY 資料，先兇他一下叫他趕快填。'}`;
+
+    await db.run('INSERT INTO chat_log (role, content) VALUES (?, ?)', ['user', message]);
+
+    const historyDesc = await db.all('SELECT role, content FROM chat_log ORDER BY id DESC LIMIT 20');
+    const history = historyDesc.reverse();
+
+    const contents = history.slice(0, -1).map(h => ({
+      role: h.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: h.content }]
+    }));
+
+    const chat = model.startChat({
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      history: contents
+    });
+
+    let result;
+    for (let i = 0; i < 3; i++) {
+      try {
+        result = await chat.sendMessage(message);
+        break;
+      } catch (e) {
+        if (i === 2 || !String(e.message).match(/503|UNAVAILABLE/)) throw e;
+        await new Promise(r => setTimeout(r, 1500));
+      }
+    }
+    const reply = result.response.text();
+
+    await db.run('INSERT INTO chat_log (role, content) VALUES (?, ?)', ['assistant', reply]);
+    res.json({ reply });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ reply: `錯誤：${err.message}` });
+  }
+});
+
+app.post('/api/meal', async (req, res) => {
+  try {
+    const { log_date, meal_type, content, note } = req.body;
+    if (!content || !meal_type || !log_date) return res.status(400).json({ error: '缺欄位' });
+
+    const latest = await db.get('SELECT * FROM inbody ORDER BY id DESC LIMIT 1');
+    const wantFeedback = (note || '').includes('小健');
+
+    const prompt = `你是營養師兼健身教練「小健」。分析使用者這餐吃的營養，並視情況給評論。
+
+使用者資料：${latest ? `體重${latest.weight}kg、體脂${latest.body_fat}%、骨骼肌${latest.muscle}kg、BMR${latest.bmr}kcal、目標：${latest.goal}` : '尚未填 INBODY'}
+
+餐次：${meal_type}
+吃了什麼（含分量）：${content}
+備註：${note || '無'}
+
+回傳 JSON（不要任何 markdown 或其他文字）：
+{
+  "calories": 總熱量數字(kcal，整數),
+  "protein": 蛋白質(g，數字可帶一位小數),
+  "carbs": 碳水(g),
+  "fat": 脂肪(g),
+  "feedback": "${wantFeedback ? `使用者在備註呼喚你（小健），必須：
+① 先回應備註裡真正在問的事或抱怨/炫耀的點（接住他的話）
+② 再嘴他（**每次挑不同風格，避免模板感**）。可選：無奈長輩 / 短促打臉（「廢」「笑死」）/ 反諷 / 假溫柔 / 專業嗆 / 迷因比喻（「我阿嬤吃飯都比你有營養」）/ 冷淡哦 / 裝可憐
+③ 給具體飲食建議（要補什麼、分量多少、該調整哪餐）
+禁令：同一次最多用一次「細狗」「廢物」；不要條列式；不要官腔；不要每次開頭「哇」「唉呦」` : ''}"
+}${wantFeedback ? '' : '\n注意：備註沒呼喚小健，feedback 欄位請留空字串。'}`;
+
+    const jsonModel = genAI.getGenerativeModel({
+      model: 'gemini-2.5-flash-lite',
+      generationConfig: { responseMimeType: 'application/json' }
+    });
+
+    let result;
+    for (let i = 0; i < 3; i++) {
+      try { result = await jsonModel.generateContent(prompt); break; }
+      catch (e) {
+        if (i === 2 || !String(e.message).match(/503|UNAVAILABLE/)) throw e;
+        await new Promise(r => setTimeout(r, 1500));
+      }
+    }
+    const parsed = JSON.parse(result.response.text());
+    const info = await db.run(
+      'INSERT INTO meal_logs (log_date, meal_type, content, note, calories, protein, carbs, fat, feedback) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [log_date, meal_type, content, note || null, parsed.calories, parsed.protein, parsed.carbs, parsed.fat, parsed.feedback || null]
+    );
+    res.json({ id: info.lastInsertRowid, ...parsed });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/meals', async (req, res) => {
+  try {
+    const rows = await db.all('SELECT * FROM meal_logs ORDER BY log_date DESC, id DESC LIMIT 50');
+    res.json(rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/meal/:id', async (req, res) => {
+  try {
+    await db.run('DELETE FROM meal_logs WHERE id = ?', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/meals/daily-summary', async (req, res) => {
+  try {
+    const date = req.query.date || new Date().toISOString().slice(0, 10);
+    const row = await db.get(`
+      SELECT SUM(calories) AS calories, SUM(protein) AS protein, SUM(carbs) AS carbs, SUM(fat) AS fat, COUNT(*) AS meals
+      FROM meal_logs WHERE log_date = ?
+    `, [date]);
+    res.json({ date, ...row });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/calendar-event', async (req, res) => {
+  try {
+    const { event_date, title, type, note } = req.body;
+    if (!event_date || !title) return res.status(400).json({ error: '缺日期或標題' });
+    const info = await db.run(
+      'INSERT INTO calendar_events (event_date, title, type, note) VALUES (?, ?, ?, ?)',
+      [event_date, title, type || '訓練計畫', note || null]
+    );
+    res.json({ id: info.lastInsertRowid });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/calendar-events', async (req, res) => {
+  try {
+    const rows = await db.all('SELECT * FROM calendar_events ORDER BY event_date');
+    res.json(rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/calendar-event/:id', async (req, res) => {
+  try {
+    await db.run('DELETE FROM calendar_events WHERE id = ?', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/day/:date', async (req, res) => {
+  try {
+    const date = req.params.date;
+    const events = await db.all('SELECT * FROM calendar_events WHERE event_date = ? ORDER BY id', [date]);
+    const logs = await db.all('SELECT * FROM workout_logs WHERE log_date = ?', [date]);
+    const logsFull = [];
+    for (const l of logs) {
+      const sets = await db.all('SELECT * FROM workout_sets WHERE log_id = ?', [l.id]);
+      logsFull.push({ ...l, sets });
+    }
+    const meals = await db.all('SELECT * FROM meal_logs WHERE log_date = ? ORDER BY id', [date]);
+    res.json({ date, events, workout_logs: logsFull, meals });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
+const PORT = process.env.PORT || 3000;
+db.init().then(() => {
+  app.listen(PORT, () => console.log(`🏋️  健身助手 http://localhost:${PORT}`));
+}).catch((err) => {
+  console.error('DB init failed:', err);
+  process.exit(1);
+});

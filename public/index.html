@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a84ff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="小健">
+<title>🏋️ 小健 Fitness</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="apple-touch-icon" href="/icon.svg">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+</head>
+<body>
+<div class="container">
+  <h1>🏋️ 我的健身小助手</h1>
+
+  <section class="card">
+    <h2>INBODY 資料</h2>
+    <div id="latest-inbody" class="latest-box"></div>
+
+    <div class="tab-bar">
+      <button class="tab" data-tab="photo">📷 拍照辨識</button>
+      <button class="tab" data-tab="manual">✍️ 手動輸入</button>
+    </div>
+
+    <div id="tab-photo" class="tab-panel" style="display:none;">
+      <label>上傳 INBODY 報告照片（支援 jpg / png / heic）
+        <input type="file" id="inbody-file" accept="image/*,.heic,.HEIC">
+      </label>
+      <button id="recognize-btn">🔍 辨識</button>
+      <p id="recognize-msg"></p>
+    </div>
+
+    <form id="inbody-form" style="margin-top:10px; display:none;">
+      <div class="grid2">
+        <label>體重 (kg) <input name="weight" type="number" step="0.1" required></label>
+        <label>體脂率 (%) <input name="body_fat" type="number" step="0.1" required></label>
+        <label>骨骼肌量 (kg) <input name="muscle" type="number" step="0.1" required></label>
+        <label>基礎代謝率 (kcal) <input name="bmr" type="number" required></label>
+      </div>
+      <label>目標
+        <select name="goal">
+          <option value="增肌">增肌</option>
+          <option value="減脂">減脂</option>
+          <option value="維持">維持</option>
+        </select>
+      </label>
+      <button>💾 確認並儲存</button>
+    </form>
+    <p id="save-msg"></p>
+
+    <div id="inbody-feedback" class="bubble assistant" style="display:none;"></div>
+
+    <details style="margin-top:16px;" open>
+      <summary>📈 趨勢圖</summary>
+      <div class="chart-tabs">
+        <button class="chart-tab active" data-metric="weight">體重</button>
+        <button class="chart-tab" data-metric="body_fat">體脂率</button>
+        <button class="chart-tab" data-metric="muscle">骨骼肌</button>
+      </div>
+      <div class="chart-range">
+        <button class="range-btn active" data-range="5">近 5 次</button>
+        <button class="range-btn" data-range="all">全部</button>
+      </div>
+      <canvas id="trend-chart" height="180"></canvas>
+      <p id="trend-msg" class="hint"></p>
+    </details>
+
+    <details style="margin-top:12px;">
+      <summary>📋 歷史紀錄（可刪除）</summary>
+      <div id="inbody-history"></div>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2>訓練計時器</h2>
+    <div class="timer-total">
+      <div class="big-number" id="total-time">00:00:00</div>
+      <div class="timer-btns">
+        <button id="start-workout">▶ 開始訓練</button>
+        <button id="end-workout" disabled>■ 結束並儲存</button>
+      </div>
+    </div>
+    <hr>
+    <div class="timer-rest">
+      <label>組間休息秒數
+        <input id="rest-seconds" type="number" value="90" min="5" max="600">
+      </label>
+      <div class="quick-btns">
+        <button type="button" class="preset" data-sec="60">60s</button>
+        <button type="button" class="preset" data-sec="90">90s</button>
+        <button type="button" class="preset" data-sec="120">120s</button>
+        <button type="button" class="preset" data-sec="180">180s</button>
+      </div>
+      <div class="big-number" id="rest-display">—</div>
+      <div class="timer-btns">
+        <button id="start-rest">開始倒數</button>
+        <button id="stop-rest" disabled>停止</button>
+      </div>
+    </div>
+    <p id="workout-msg"></p>
+    <details style="margin-top:12px;">
+      <summary>🕐 訓練時間紀錄（可刪除）</summary>
+      <div id="session-history"></div>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2>今日訓練回報</h2>
+    <form id="workout-log-form">
+      <label>日期 <input type="date" id="log-date" required></label>
+      <div class="set-header">
+        <span>動作</span>
+        <span>組數</span>
+        <span>次數</span>
+        <span>重量(kg)</span>
+        <span></span>
+      </div>
+      <div id="sets-container"></div>
+      <button type="button" id="add-set">+ 加一個動作</button>
+      <label>備註（訓練感受、與上次比較…）
+        <textarea id="log-note" rows="2" placeholder="例如：今天深蹲比上次輕鬆、腰有點緊"></textarea>
+        <small class="hint">💡 在備註中寫上「<b>小健</b>」兩字，AI 教練才會回饋；沒寫就是單純記錄。</small>
+      </label>
+      <button type="submit">儲存</button>
+    </form>
+    <div id="log-msg"></div>
+    <div id="log-feedback" class="bubble assistant" style="display:none;"></div>
+    <details style="margin-top:12px;">
+      <summary>近期訓練紀錄</summary>
+      <div id="log-history"></div>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2>今日飲食回報</h2>
+    <div id="daily-summary" class="daily-sum"></div>
+    <form id="meal-form">
+      <label>日期 <input type="date" id="meal-date" required></label>
+      <label>餐次
+        <select id="meal-type" required>
+          <option value="早餐">早餐</option>
+          <option value="午餐">午餐</option>
+          <option value="晚餐">晚餐</option>
+          <option value="點心">點心</option>
+        </select>
+      </label>
+      <label>吃了什麼（請含分量）
+        <textarea id="meal-content" rows="2" required placeholder="例如：白飯 1 碗、雞胸肉 150g、青菜一盤、蛋 2 顆"></textarea>
+      </label>
+      <label>備註
+        <textarea id="meal-note" rows="2" placeholder="例如：小健，今天吃太撐了"></textarea>
+        <small class="hint">💡 備註寫「<b>小健</b>」兩字才會被他嘴；不寫就是單純記錄營養。</small>
+      </label>
+      <button type="submit">儲存並分析</button>
+    </form>
+    <div id="meal-msg"></div>
+    <div id="meal-result" style="display:none;"></div>
+    <details style="margin-top:12px;">
+      <summary>近期飲食紀錄</summary>
+      <div id="meal-history"></div>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2>訓練行事曆</h2>
+    <div id="calendar"></div>
+    <div id="day-panel" class="day-panel" style="display:none;">
+      <h3 id="day-panel-title"></h3>
+
+      <div class="day-section">
+        <h4>📅 排定事件</h4>
+        <div id="day-events"></div>
+        <form id="add-event-form">
+          <div class="grid2">
+            <label>類型
+              <select id="event-type">
+                <option value="訓練計畫">訓練計畫</option>
+                <option value="休息日">休息日</option>
+                <option value="其他">其他</option>
+              </select>
+            </label>
+            <label>標題 <input id="event-title" placeholder="例如：胸肩三頭日" required></label>
+          </div>
+          <label>備註 <input id="event-note" placeholder="可留空"></label>
+          <button>＋ 新增事件</button>
+        </form>
+      </div>
+
+      <div class="day-section">
+        <h4>💪 當天訓練紀錄</h4>
+        <div id="day-workouts"></div>
+      </div>
+
+      <div class="day-section">
+        <h4>🍚 當天飲食紀錄</h4>
+        <div id="day-meals"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>跟小健聊聊</h2>
+    <div id="chat"></div>
+    <form id="chat-form">
+      <input id="msg" placeholder="例如：今天該怎麼吃？" required>
+      <button>送出</button>
+    </form>
+  </section>
+
+  <script src="app.js"></script>
+</div>
+</body>
+</html>

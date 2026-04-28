@@ -1,0 +1,18 @@
+{
+  "name": "fitness-app",
+  "version": "0.1.0",
+  "description": "健身紀錄 + AI 健身小助手",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@libsql/client": "^0.17.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1"
+  }
+}
