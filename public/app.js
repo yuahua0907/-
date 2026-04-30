@@ -720,6 +720,12 @@ async function loadCalendarEvents() {
   return [...evs, ...done];
 }
 
+function highlightSelectedDay(dateStr) {
+  document.querySelectorAll('.fc-daygrid-day.fc-day-selected').forEach(el => el.classList.remove('fc-day-selected'));
+  const cell = document.querySelector(`.fc-daygrid-day[data-date="${dateStr}"]`);
+  if (cell) cell.classList.add('fc-day-selected');
+}
+
 async function renderDayPanel(date) {
   selectedDate = date;
   dayPanel.style.display = 'block';
@@ -782,8 +788,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     height: 450,
     headerToolbar: { left: 'prev,next today', center: 'title', right: '' },
     buttonText: { today: '今天' },
-    dateClick: (info) => renderDayPanel(info.dateStr),
-    eventClick: (info) => renderDayPanel(info.event.startStr.slice(0, 10))
+    dayCellContent: (arg) => ({ html: String(arg.date.getDate()) }),
+    dateClick: (info) => { highlightSelectedDay(info.dateStr); renderDayPanel(info.dateStr); },
+    eventClick: (info) => { const d = info.event.startStr.slice(0, 10); highlightSelectedDay(d); renderDayPanel(d); }
   });
   calendar.render();
   refreshCalendar();
