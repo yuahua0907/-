@@ -601,6 +601,75 @@ details[open] > summary { margin-bottom: 6px; }
   color: var(--ink);
 }
 
+/* ========== 首頁 Dashboard ========== */
+.dash-card .streak-box {
+  background: var(--ink);
+  color: #fff;
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  border: 1.5px solid var(--ink);
+  margin: 0 0 12px 0;
+}
+.dash-card .streak-flame { font-size: 32px; line-height: 1; }
+.dash-card .streak-num {
+  font-size: 44px;
+  font-weight: 100;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+.dash-card .streak-lbl {
+  font-size: 10px;
+  letter-spacing: 0.25em;
+  margin-top: 6px;
+  opacity: 0.8;
+  font-weight: 600;
+}
+.dash-card .today-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  border: 1.5px solid var(--ink);
+}
+.dash-card .today-cell {
+  padding: 14px;
+  border-right: 1px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dash-card .today-cell:nth-child(2n) { border-right: none; }
+.dash-card .today-cell:nth-last-child(-n+2) { border-bottom: none; }
+.dash-card .t-label {
+  font-size: 9px;
+  color: var(--ink-3);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.dash-card .t-value {
+  font-size: 28px;
+  font-weight: 200;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  line-height: 1.1;
+}
+.dash-card .t-unit {
+  font-size: 10px;
+  color: var(--ink-3);
+  letter-spacing: 0.1em;
+  font-weight: 600;
+}
+@media (prefers-color-scheme: dark) {
+  .dash-card .streak-box { background: var(--ink); color: #000; border-color: var(--ink); }
+  .dash-card .today-grid { border-color: var(--ink); }
+  .dash-card .today-cell { background: var(--card); border-color: var(--ink); }
+  .dash-card .t-value { color: var(--ink); }
+}
+
 /* ========== 飲食紀錄按日分組 ========== */
 .meal-day {
   border: 1.5px solid var(--ink);

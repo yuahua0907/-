@@ -565,6 +565,55 @@ app.get('/api/day/:date', async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
 
+// 首頁 Dashboard 摘要：連續天數 + 今日總覽 + 本月訓練天數
+app.get('/api/dashboard', async (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const monthPrefix = today.slice(0, 7);
+
+    // 今日訓練動作數（不重複動作）
+    const todayLogs = await db.all('SELECT id FROM workout_logs WHERE user = ? AND log_date = ?', [req.user, today]);
+    let todayWorkoutCount = 0;
+    for (const l of todayLogs) {
+      const sets = await db.all('SELECT DISTINCT exercise FROM workout_sets WHERE log_id = ?', [l.id]);
+      todayWorkoutCount += sets.length;
+    }
+
+    // 今日熱量
+    const todayMeals = await db.all('SELECT calories FROM meal_logs WHERE user = ? AND log_date = ?', [req.user, today]);
+    const todayKcal = todayMeals.reduce((s, m) => s + (m.calories || 0), 0);
+
+    // 今日運動時間（秒 → 分）
+    const todaySessions = await db.all('SELECT duration_seconds FROM workout_sessions WHERE user = ? AND date(started_at) = ?', [req.user, today]);
+    const todayMins = Math.round(todaySessions.reduce((s, x) => s + (x.duration_seconds || 0), 0) / 60);
+
+    // 本月訓練天數
+    const monthLogs = await db.all('SELECT DISTINCT log_date FROM workout_logs WHERE user = ? AND log_date LIKE ?', [req.user, monthPrefix + '%']);
+    const monthDays = monthLogs.length;
+
+    // 連續天數：往回算，當天有「訓練 OR 飲食」就算一天
+    const allWorkoutDates = await db.all('SELECT DISTINCT log_date FROM workout_logs WHERE user = ?', [req.user]);
+    const allMealDates = await db.all('SELECT DISTINCT log_date FROM meal_logs WHERE user = ?', [req.user]);
+    const dateSet = new Set([...allWorkoutDates.map(r => r.log_date), ...allMealDates.map(r => r.log_date)]);
+    let streak = 0;
+    const cur = new Date(today);
+    while (true) {
+      const ds = cur.toISOString().slice(0, 10);
+      if (dateSet.has(ds)) {
+        streak++;
+        cur.setDate(cur.getDate() - 1);
+      } else if (streak === 0 && ds === today) {
+        // 今天沒紀錄就從昨天開始算
+        cur.setDate(cur.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+
+    res.json({ streak, today_workouts: todayWorkoutCount, today_kcal: Math.round(todayKcal), today_mins: todayMins, month_days: monthDays });
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
+});
+
 const PORT = process.env.PORT || 3000;
 db.init().then(() => {
   app.listen(PORT, () => console.log(`🏋️  健身助手 http://localhost:${PORT}`));

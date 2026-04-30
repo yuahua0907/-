@@ -167,7 +167,7 @@ recognizeBtn.addEventListener('click', async () => {
 // ===== 趨勢圖 =====
 let trendChart = null;
 let trendData = [];
-let currentMetric = 'weight';
+let currentMetric = 'muscle';
 let currentRange = 5;
 const metricLabels = { weight: '體重 (kg)', body_fat: '體脂率 (%)', muscle: '骨骼肌 (kg)' };
 const metricColors = { weight: '#0a84ff', body_fat: '#ff3b30', muscle: '#34c759' };
@@ -919,6 +919,26 @@ function showUpdateBanner(newVer) {
     banner.remove();
   });
 }
+
+// ===== 首頁 Dashboard =====
+async function loadDashboard() {
+  try {
+    const res = await fetch('/api/dashboard');
+    if (!res.ok) return;
+    const d = await res.json();
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('streak-days', d.streak ?? 0);
+    set('today-workouts', d.today_workouts ?? 0);
+    set('today-kcal', d.today_kcal ?? 0);
+    set('today-mins', d.today_mins ?? 0);
+    set('month-days', d.month_days ?? 0);
+  } catch (e) { console.warn('dashboard load failed', e); }
+}
+loadDashboard();
+// Tab 切到首頁時刷新（含每次 hashchange）
+window.addEventListener('hashchange', () => {
+  if ((location.hash || '#home') === '#home') loadDashboard();
+});
 
 // 進場檢查 + 每 5 分鐘 + 從多工切回來時檢查
 window.addEventListener('load', checkAppVersion);

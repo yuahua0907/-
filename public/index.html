@@ -19,6 +19,39 @@
 <div class="container">
   <h1>🏋️ 我的健身小助手</h1>
 
+  <section class="card dash-card" data-tab="home">
+    <h2>儀表板</h2>
+    <div class="streak-box">
+      <div class="streak-flame">🔥</div>
+      <div>
+        <div class="streak-num" id="streak-days">—</div>
+        <div class="streak-lbl">DAYS · 連續紀錄</div>
+      </div>
+    </div>
+    <div class="today-grid" style="margin-top:12px;">
+      <div class="today-cell">
+        <div class="t-label">今日訓練</div>
+        <div class="t-value" id="today-workouts">—</div>
+        <div class="t-unit">項</div>
+      </div>
+      <div class="today-cell">
+        <div class="t-label">今日熱量</div>
+        <div class="t-value" id="today-kcal">—</div>
+        <div class="t-unit">kcal</div>
+      </div>
+      <div class="today-cell">
+        <div class="t-label">運動時間</div>
+        <div class="t-value" id="today-mins">—</div>
+        <div class="t-unit">分</div>
+      </div>
+      <div class="today-cell">
+        <div class="t-label">本月訓練</div>
+        <div class="t-value" id="month-days">—</div>
+        <div class="t-unit">天</div>
+      </div>
+    </div>
+  </section>
+
   <section class="card" data-tab="home">
     <h2>INBODY 資料</h2>
     <div id="latest-inbody" class="latest-box"></div>
@@ -59,9 +92,9 @@
     <details style="margin-top:16px;" open>
       <summary>📈 趨勢圖</summary>
       <div class="chart-tabs">
-        <button class="chart-tab active" data-metric="weight">體重</button>
+        <button class="chart-tab" data-metric="weight">體重</button>
         <button class="chart-tab" data-metric="body_fat">體脂率</button>
-        <button class="chart-tab" data-metric="muscle">骨骼肌</button>
+        <button class="chart-tab active" data-metric="muscle">骨骼肌</button>
       </div>
       <div class="chart-range">
         <button class="range-btn active" data-range="5">近 5 次</button>
