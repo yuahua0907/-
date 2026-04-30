@@ -601,6 +601,116 @@ details[open] > summary { margin-bottom: 6px; }
   color: var(--ink);
 }
 
+/* ========== 飲食紀錄按日分組 ========== */
+.meal-day {
+  border: 1.5px solid var(--ink);
+  margin-bottom: 8px;
+  background: #fff;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.meal-day > summary {
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: none;
+  position: relative;
+}
+.meal-day > summary::-webkit-details-marker { display: none; }
+.meal-day > summary::after {
+  content: "+";
+  font-size: 20px;
+  font-weight: 200;
+  margin-left: 10px;
+  transition: transform 0.2s;
+}
+.meal-day[open] > summary::after { transform: rotate(45deg); }
+.meal-day .md-date { font-weight: 800; letter-spacing: 0.08em; }
+.meal-day .md-stats {
+  font-size: 11px;
+  color: var(--ink-2);
+  margin-left: auto;
+  margin-right: 8px;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+.meal-day .md-body {
+  padding: 0 14px 12px;
+  border-top: 1px solid var(--line);
+}
+.meal-day .md-totals {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 0;
+  margin-bottom: 6px;
+  border-bottom: 1px dashed var(--line);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+}
+@media (prefers-color-scheme: dark) {
+  .meal-day { background: var(--card); border-color: var(--ink); box-shadow: 3px 3px 0 var(--ink); }
+  .meal-day .md-stats { color: var(--ink-2); }
+  .meal-day .md-body { border-top-color: var(--line); }
+  .meal-day .md-totals { border-bottom-color: var(--line); }
+}
+
+/* ========== 底部 Tab Bar ========== */
+#bottom-tabs {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 100;
+  display: flex;
+  background: #fff;
+  border-top: 1.5px solid var(--ink);
+  padding: 8px 0 calc(10px + env(safe-area-inset-bottom));
+}
+#bottom-tabs .bt-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: var(--ink-3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 0;
+  min-height: 0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  transform: none;
+}
+#bottom-tabs .bt-tab:hover { transform: none; box-shadow: none; }
+#bottom-tabs .bt-tab:active { transform: scale(0.96); box-shadow: none; }
+#bottom-tabs .bt-tab svg {
+  width: 24px; height: 24px;
+  stroke: var(--ink-3);
+}
+#bottom-tabs .bt-tab.active { color: var(--ink); }
+#bottom-tabs .bt-tab.active svg { stroke: var(--ink); stroke-width: 2; }
+#bottom-tabs .bt-tab.active span { font-weight: 800; }
+
+/* 為底部 Tab Bar 留空間 */
+.container { padding-bottom: 96px !important; }
+
+@media (prefers-color-scheme: dark) {
+  #bottom-tabs { background: var(--bg); border-top-color: var(--ink); }
+  #bottom-tabs .bt-tab { color: var(--ink-3); }
+  #bottom-tabs .bt-tab svg { stroke: var(--ink-3); }
+  #bottom-tabs .bt-tab.active { color: var(--ink); }
+  #bottom-tabs .bt-tab.active svg { stroke: var(--ink); }
+}
+
 /* ========== 更新提示橫幅 ========== */
 #update-banner {
   position: fixed;

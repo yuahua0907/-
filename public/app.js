@@ -561,23 +561,57 @@ async function loadDailySummary() {
 async function loadMealHistory() {
   const res = await fetch('/api/meals');
   const rows = await res.json();
-  mealHistory.innerHTML = rows.slice(0, 15).map(m => `
-    <div class="meal-item" data-id="${m.id}">
-      <button class="del-meal" data-id="${m.id}">刪除</button>
-      <strong>${m.log_date} ${m.meal_type}</strong><br>
-      ${escapeHtml(m.content)}
-      ${m.note ? `<br><em>${escapeHtml(m.note)}</em>` : ''}
-      <div class="nutrition">
-        <span>🔥 ${Math.round(m.calories || 0)} kcal</span>
-        <span>💪 蛋白 ${m.protein || 0}g</span>
-        <span>🍚 碳水 ${m.carbs || 0}g</span>
-        <span>🥑 脂肪 ${m.fat || 0}g</span>
-      </div>
-      ${m.feedback ? `<details class="fb-toggle"><summary>💬 小健的回饋</summary><div class="fb-body">${escapeHtml(m.feedback)}</div></details>` : ''}
-    </div>
-  `).join('') || '<p>尚無紀錄</p>';
+  if (!rows.length) { mealHistory.innerHTML = '<p class="empty-hint">尚無紀錄</p>'; return; }
+
+  // 按日期分組
+  const groups = {};
+  for (const m of rows) {
+    (groups[m.log_date] = groups[m.log_date] || []).push(m);
+  }
+  const dates = Object.keys(groups).sort((a, b) => b.localeCompare(a)).slice(0, 30);
+
+  mealHistory.innerHTML = dates.map(date => {
+    const meals = groups[date];
+    const totalKcal = meals.reduce((s, m) => s + (m.calories || 0), 0);
+    const totalP = meals.reduce((s, m) => s + (m.protein || 0), 0);
+    const totalC = meals.reduce((s, m) => s + (m.carbs || 0), 0);
+    const totalF = meals.reduce((s, m) => s + (m.fat || 0), 0);
+    return `
+      <details class="meal-day">
+        <summary>
+          <span class="md-date">${date}</span>
+          <span class="md-stats">${meals.length} 餐 · ${Math.round(totalKcal)} kcal</span>
+        </summary>
+        <div class="md-body">
+          <div class="md-totals">
+            <span>🔥 ${Math.round(totalKcal)}</span>
+            <span>💪 ${totalP.toFixed(1)}g</span>
+            <span>🍚 ${totalC.toFixed(1)}g</span>
+            <span>🥑 ${totalF.toFixed(1)}g</span>
+          </div>
+          ${meals.map(m => `
+            <div class="meal-item" data-id="${m.id}">
+              <button class="del-meal" data-id="${m.id}">刪除</button>
+              <strong>${m.meal_type}</strong>：${escapeHtml(m.content)}
+              ${m.note ? `<br><em>${escapeHtml(m.note)}</em>` : ''}
+              <div class="nutrition">
+                <span>🔥 ${Math.round(m.calories || 0)} kcal</span>
+                <span>💪 ${m.protein || 0}g</span>
+                <span>🍚 ${m.carbs || 0}g</span>
+                <span>🥑 ${m.fat || 0}g</span>
+              </div>
+              ${m.feedback ? `<details class="fb-toggle"><summary>💬 小健的回饋</summary><div class="fb-body">${escapeHtml(m.feedback)}</div></details>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      </details>
+    `;
+  }).join('');
+
   mealHistory.querySelectorAll('.del-meal').forEach(btn => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       if (!confirm('確定刪除這筆飲食紀錄？')) return;
       await fetch(`/api/meal/${btn.dataset.id}`, { method: 'DELETE' });
       loadMealHistory();

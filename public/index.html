@@ -19,7 +19,7 @@
 <div class="container">
   <h1>🏋️ 我的健身小助手</h1>
 
-  <section class="card">
+  <section class="card" data-tab="home">
     <h2>INBODY 資料</h2>
     <div id="latest-inbody" class="latest-box"></div>
 
@@ -77,7 +77,7 @@
     </details>
   </section>
 
-  <section class="card">
+  <section class="card" data-tab="gym">
     <h2>訓練計時器</h2>
     <div class="timer-total">
       <div class="big-number" id="total-time">00:00:00</div>
@@ -110,7 +110,7 @@
     </details>
   </section>
 
-  <section class="card">
+  <section class="card" data-tab="gym">
     <h2>今日訓練回報</h2>
     <form id="workout-log-form">
       <label>日期 <input type="date" id="log-date" required></label>
@@ -137,7 +137,7 @@
     </details>
   </section>
 
-  <section class="card">
+  <section class="card" data-tab="meal">
     <h2>今日飲食回報</h2>
     <div id="daily-summary" class="daily-sum"></div>
     <form id="meal-form">
@@ -168,13 +168,15 @@
     </form>
     <div id="meal-msg"></div>
     <div id="meal-result" style="display:none;"></div>
-    <details style="margin-top:12px;">
-      <summary>近期飲食紀錄</summary>
-      <div id="meal-history"></div>
-    </details>
   </section>
 
-  <section class="card">
+  <section class="card" data-tab="meal">
+    <h2>飲食紀錄</h2>
+    <p class="hint">同一天的飲食合併在一格，點任一格展開看那天吃了什麼。</p>
+    <div id="meal-history"></div>
+  </section>
+
+  <section class="card" data-tab="home">
     <h2>訓練行事曆</h2>
     <div id="calendar"></div>
     <div id="day-panel" class="day-panel" style="display:none;">
@@ -211,7 +213,7 @@
     </div>
   </section>
 
-  <section class="card">
+  <section class="card" data-tab="coach">
     <h2>📊 小健週報 / 月報</h2>
     <p class="hint">讓小健綜合看你最近的訓練、飲食、體重變化，給總結和下週建議。</p>
     <div class="report-btn-row">
@@ -221,7 +223,7 @@
     <div id="report-result" class="report-box" style="display:none;"></div>
   </section>
 
-  <section class="card">
+  <section class="card" data-tab="coach">
     <h2>跟小健聊聊</h2>
     <div id="chat"></div>
     <form id="chat-form">
@@ -232,5 +234,45 @@
 
   <script src="app.js"></script>
 </div>
+
+<!-- 底部 Tab Bar — 黑白線條 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="tab-i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V11z"/></symbol>
+    <symbol id="tab-i-gym" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7v10M3 9v6M19 7v10M21 9v6M9 12h6M7 5v14M17 5v14"/></symbol>
+    <symbol id="tab-i-meal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4v7a3 3 0 0 0 3 3v6M8 4v7M11 4v7M19 4c-1.5 0-2.5 3-2.5 6s.8 2.5 2.5 2.5V20"/></symbol>
+    <symbol id="tab-i-coach" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="13" rx="2"/><path d="M12 4v3M9 13h.01M15 13h.01M9 17h6M2 12h2M22 12h-2"/></symbol>
+  </defs>
+</svg>
+
+<nav id="bottom-tabs" role="tablist">
+  <button class="bt-tab" data-tab="home" role="tab"><svg><use href="#tab-i-home"/></svg><span>HOME</span></button>
+  <button class="bt-tab" data-tab="gym" role="tab"><svg><use href="#tab-i-gym"/></svg><span>GYM</span></button>
+  <button class="bt-tab" data-tab="meal" role="tab"><svg><use href="#tab-i-meal"/></svg><span>MEAL</span></button>
+  <button class="bt-tab" data-tab="coach" role="tab"><svg><use href="#tab-i-coach"/></svg><span>COACH</span></button>
+</nav>
+
+<script>
+(function() {
+  const TABS = ['home', 'gym', 'meal', 'coach'];
+  function setTab(tab) {
+    if (!TABS.includes(tab)) tab = 'home';
+    document.querySelectorAll('section.card[data-tab]').forEach(s => {
+      s.style.display = s.dataset.tab === tab ? '' : 'none';
+    });
+    document.querySelectorAll('#bottom-tabs .bt-tab').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === tab);
+    });
+    if (location.hash.replace('#','') !== tab) history.replaceState(null, '', '#' + tab);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+  document.querySelectorAll('#bottom-tabs .bt-tab').forEach(b => {
+    b.addEventListener('click', () => setTab(b.dataset.tab));
+  });
+  window.addEventListener('hashchange', () => setTab(location.hash.replace('#','')));
+  setTab(location.hash.replace('#','') || 'home');
+})();
+</script>
+
 </body>
 </html>
