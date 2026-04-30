@@ -601,6 +601,43 @@ details[open] > summary { margin-bottom: 6px; }
   color: var(--ink);
 }
 
+/* ========== INBODY 輸入展開區 ========== */
+.inbody-input-wrap {
+  border: 1.5px dashed var(--ink);
+  margin: 8px 0 12px;
+  padding: 0;
+}
+.inbody-input-wrap > summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  padding: 12px 14px;
+  text-align: center;
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  background: #fff;
+  color: var(--ink);
+  border: none;
+  display: block;
+}
+.inbody-input-wrap > summary::-webkit-details-marker { display: none; }
+.inbody-input-wrap[open] > summary {
+  background: var(--ink);
+  color: #fff;
+  border-bottom: 1.5px solid var(--ink);
+}
+.inbody-input-wrap[open] > summary::after { content: ""; }
+.inbody-input-wrap > *:not(summary) { padding: 0 14px 14px; }
+.inbody-input-wrap[open] > *:not(summary):first-of-type { padding-top: 14px; }
+
+@media (prefers-color-scheme: dark) {
+  .inbody-input-wrap { border-color: var(--ink); }
+  .inbody-input-wrap > summary { background: var(--card); color: var(--ink); }
+  .inbody-input-wrap[open] > summary { background: var(--ink); color: #000; }
+}
+
 /* ========== 首頁 Dashboard ========== */
 .dash-card .streak-box {
   background: var(--ink);

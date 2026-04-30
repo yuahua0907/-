@@ -56,18 +56,20 @@
     <h2>INBODY 資料</h2>
     <div id="latest-inbody" class="latest-box"></div>
 
-    <div class="tab-bar">
-      <button class="tab" data-tab="photo">📷 拍照辨識</button>
-      <button class="tab" data-tab="manual">✍️ 手動輸入</button>
-    </div>
+    <details class="inbody-input-wrap">
+      <summary>＋ 新增 / 更新 INBODY 紀錄</summary>
+      <div class="tab-bar" style="margin-top:10px;">
+        <button class="tab" data-tab="photo">📷 拍照辨識</button>
+        <button class="tab" data-tab="manual">✍️ 手動輸入</button>
+      </div>
 
-    <div id="tab-photo" class="tab-panel" style="display:none;">
-      <label>上傳 INBODY 報告照片（支援 jpg / png / heic）
-        <input type="file" id="inbody-file" accept="image/*,.heic,.HEIC">
-      </label>
-      <button id="recognize-btn">🔍 辨識</button>
-      <p id="recognize-msg"></p>
-    </div>
+      <div id="tab-photo" class="tab-panel" style="display:none;">
+        <label>上傳 INBODY 報告照片（支援 jpg / png / heic）
+          <input type="file" id="inbody-file" accept="image/*,.heic,.HEIC">
+        </label>
+        <button id="recognize-btn">🔍 辨識</button>
+        <p id="recognize-msg"></p>
+      </div>
 
     <form id="inbody-form" style="margin-top:10px; display:none;">
       <div class="grid2">
@@ -86,6 +88,7 @@
       <button>💾 確認並儲存</button>
     </form>
     <p id="save-msg"></p>
+    </details>
 
     <div id="inbody-feedback" class="bubble assistant" style="display:none;"></div>
 
