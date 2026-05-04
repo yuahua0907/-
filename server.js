@@ -584,8 +584,8 @@ app.get('/api/dashboard', async (req, res) => {
     const todayKcal = todayMeals.reduce((s, m) => s + (m.calories || 0), 0);
 
     // 今日運動時間（秒 → 分）
-    const todaySessions = await db.all('SELECT duration_seconds FROM workout_sessions WHERE user = ? AND date(started_at) = ?', [req.user, today]);
-    const todayMins = Math.round(todaySessions.reduce((s, x) => s + (x.duration_seconds || 0), 0) / 60);
+    const todaySessions = await db.all('SELECT duration_sec FROM workout_sessions WHERE user = ? AND date(started_at) = ?', [req.user, today]);
+    const todayMins = Math.round(todaySessions.reduce((s, x) => s + (x.duration_sec || 0), 0) / 60);
 
     // 本月訓練天數
     const monthLogs = await db.all('SELECT DISTINCT log_date FROM workout_logs WHERE user = ? AND log_date LIKE ?', [req.user, monthPrefix + '%']);
