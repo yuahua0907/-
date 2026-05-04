@@ -371,20 +371,29 @@ hr { border: none; border-top: 1px solid var(--ink); margin: 18px 0; }
 }
 
 .day-panel {
-  background: var(--card-2);
-  padding: 16px 14px; margin-top: 14px;
-  border: 1.5px solid var(--ink);
-  box-shadow: 4px 4px 0 var(--ink);
+  background: #fff;
+  padding: 0; margin-top: 16px;
+  border: 2px solid var(--ink);
+  box-shadow: 6px 6px 0 var(--ink);
+  position: relative;
 }
 .day-panel h3 {
-  margin: 0 0 12px; color: var(--ink); font-size: 14px; font-weight: 800;
+  margin: 0; color: #fff; background: var(--ink);
+  font-size: 15px; font-weight: 800;
   letter-spacing: 0.15em; text-transform: uppercase;
-  padding-bottom: 8px; border-bottom: 1.5px solid var(--ink);
+  padding: 14px 18px; border: none;
+  display: flex; align-items: center; gap: 8px;
 }
-.day-section { margin-top: 14px; }
+.day-section {
+  padding: 14px 16px;
+  border-top: 1px solid var(--line);
+}
+.day-section:first-of-type { border-top: none; }
 .day-section h4 {
-  margin: 0 0 8px; font-size: 10px; color: var(--ink);
-  text-transform: uppercase; letter-spacing: 0.25em; font-weight: 800;
+  margin: 0 0 10px; font-size: 10px; color: var(--ink-2);
+  text-transform: uppercase; letter-spacing: 0.3em; font-weight: 800;
+  padding-left: 4px; border-left: 3px solid var(--ink);
+  padding-top: 1px; padding-bottom: 1px;
 }
 .day-panel form { margin-top: 10px; }
 
@@ -429,16 +438,14 @@ details[open] > summary { margin-bottom: 6px; }
   .big-number { font-size: 68px; }
 }
 
-/* ========== 暗色模式（自動跟隨系統） ========== */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ink: #ffffff; --ink-2: #c8c8c8; --ink-3: #888888; --ink-4: #444444;
-    --bg: #0a0a0a; --card: #141414; --card-2: #1a1a1a;
-    --line: #2a2a2a; --line-2: #1a1a1a;
-    --brand: #ffffff; --brand-dark: #ffffff; --brand-50: #1a1a1a;
-    --shadow: 4px 4px 0 #fff;
-    --shadow-hover: 6px 6px 0 #fff;
-  }
+/* ========== 暗色模式（手動切換或跟隨系統） ========== */
+html[data-theme="dark"] {
+  --ink: #ffffff; --ink-2: #c8c8c8; --ink-3: #888888; --ink-4: #444444;
+  --bg: #0a0a0a; --card: #141414; --card-2: #1a1a1a;
+  --line: #2a2a2a; --line-2: #1a1a1a;
+  --brand: #ffffff; --brand-dark: #ffffff; --brand-50: #1a1a1a;
+  --shadow: 4px 4px 0 #fff;
+  --shadow-hover: 6px 6px 0 #fff;
   body { background: var(--bg); color: var(--ink); }
   .card { background: var(--card); border-color: var(--ink); box-shadow: 4px 4px 0 var(--ink); }
   .card h2::before { background: var(--ink); color: #000; }
@@ -632,7 +639,7 @@ details[open] > summary { margin-bottom: 6px; }
 .inbody-input-wrap > *:not(summary) { padding: 0 14px 14px; }
 .inbody-input-wrap[open] > *:not(summary):first-of-type { padding-top: 14px; }
 
-@media (prefers-color-scheme: dark) {
+html[data-theme="dark"] {
   .inbody-input-wrap { border-color: var(--ink); }
   .inbody-input-wrap > summary { background: var(--card); color: var(--ink); }
   .inbody-input-wrap[open] > summary { background: var(--ink); color: #000; }
@@ -700,7 +707,7 @@ details[open] > summary { margin-bottom: 6px; }
   letter-spacing: 0.1em;
   font-weight: 600;
 }
-@media (prefers-color-scheme: dark) {
+html[data-theme="dark"] {
   .dash-card .streak-box { background: var(--ink); color: #000; border-color: var(--ink); }
   .dash-card .today-grid { border-color: var(--ink); }
   .dash-card .today-cell { background: var(--card); border-color: var(--ink); }
@@ -761,7 +768,7 @@ details[open] > summary { margin-bottom: 6px; }
   font-weight: 700;
   color: var(--ink);
 }
-@media (prefers-color-scheme: dark) {
+html[data-theme="dark"] {
   .meal-day { background: var(--card); border-color: var(--ink); box-shadow: 3px 3px 0 var(--ink); }
   .meal-day .md-stats { color: var(--ink-2); }
   .meal-day .md-body { border-top-color: var(--line); }
@@ -809,7 +816,7 @@ details[open] > summary { margin-bottom: 6px; }
 /* 為底部 Tab Bar 留空間 */
 .container { padding-bottom: 96px !important; }
 
-@media (prefers-color-scheme: dark) {
+html[data-theme="dark"] {
   #bottom-tabs { background: var(--bg); border-top-color: var(--ink); }
   #bottom-tabs .bt-tab { color: var(--ink-3); }
   #bottom-tabs .bt-tab svg { stroke: var(--ink-3); }

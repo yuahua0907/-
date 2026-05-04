@@ -567,10 +567,14 @@ app.get('/api/day/:date', async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: err.message }); }
 });
 
+// 取得台北時區的「YYYY-MM-DD」
+function tpeDate(d = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+}
 // 首頁 Dashboard 摘要：連續天數 + 今日總覽 + 本月訓練天數
 app.get('/api/dashboard', async (req, res) => {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = tpeDate();
     const monthPrefix = today.slice(0, 7);
 
     // 今日訓練動作數（不重複動作）
@@ -598,15 +602,15 @@ app.get('/api/dashboard', async (req, res) => {
     const allMealDates = await db.all('SELECT DISTINCT log_date FROM meal_logs WHERE user = ?', [req.user]);
     const dateSet = new Set([...allWorkoutDates.map(r => r.log_date), ...allMealDates.map(r => r.log_date)]);
     let streak = 0;
-    const cur = new Date(today);
+    // 用 UTC 中午當錨點避免時區邊界，每次 -1 天再用台北日期判斷
+    const cur = new Date(today + 'T12:00:00Z');
     while (true) {
-      const ds = cur.toISOString().slice(0, 10);
+      const ds = tpeDate(cur);
       if (dateSet.has(ds)) {
         streak++;
-        cur.setDate(cur.getDate() - 1);
+        cur.setUTCDate(cur.getUTCDate() - 1);
       } else if (streak === 0 && ds === today) {
-        // 今天沒紀錄就從昨天開始算
-        cur.setDate(cur.getDate() - 1);
+        cur.setUTCDate(cur.getUTCDate() - 1);
       } else {
         break;
       }

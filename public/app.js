@@ -52,6 +52,7 @@ window.addEventListener('DOMContentLoaded', () => {
   bar.innerHTML = `
     <span>👤 <b id="user-name"></b></span>
     <div class="user-bar-actions">
+      <button id="theme-toggle" type="button" title="切換亮/暗">🌓</button>
       <button id="rename-user" type="button">改名</button>
       <button id="show-uid" type="button">我的識別碼</button>
       <button id="sync-uid" type="button">換裝置同步</button>
@@ -61,6 +62,24 @@ window.addEventListener('DOMContentLoaded', () => {
 
   const refresh = () => { document.getElementById('user-name').textContent = getName() || '匿名'; };
   refresh();
+
+  // 主題切換：light / dark / auto（auto = 跟隨系統）
+  const sysDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const applyTheme = (t) => {
+    const effective = t === 'auto' ? (sysDark() ? 'dark' : 'light') : t;
+    document.documentElement.setAttribute('data-theme', effective);
+    document.getElementById('theme-toggle').textContent = t === 'auto' ? '🌓' : t === 'dark' ? '🌙' : '☀';
+  };
+  applyTheme(localStorage.getItem('theme') || 'auto');
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const cur = localStorage.getItem('theme') || 'auto';
+    const next = cur === 'auto' ? 'light' : cur === 'light' ? 'dark' : 'auto';
+    localStorage.setItem('theme', next);
+    applyTheme(next);
+  });
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if ((localStorage.getItem('theme') || 'auto') === 'auto') applyTheme('auto');
+  });
 
   document.getElementById('rename-user').addEventListener('click', () => {
     const cur = getName();
@@ -472,17 +491,40 @@ addSetBtn.addEventListener('click', () => addSetRow());
 async function loadHistory() {
   const res = await fetch('/api/workout-logs');
   const logs = await res.json();
-  logHistory.innerHTML = logs.slice(0, 10).map(l => `
-    <div class="log-item" data-id="${l.id}">
-      <button class="del-log" data-id="${l.id}">刪除</button>
-      <strong>${l.log_date}</strong>
-      ${l.sets.map(s => `${s.exercise} ${s.sets}組×${s.reps}次 ${s.weight}kg`).join('、')}
-      ${l.note ? `<br><em>${escapeHtml(l.note)}</em>` : ''}
-      ${l.feedback ? `<details class="fb-toggle"><summary>💬 小健的回饋</summary><div class="fb-body">${escapeHtml(l.feedback)}</div></details>` : ''}
-    </div>
-  `).join('') || '<p>尚無紀錄</p>';
+  if (!logs.length) { logHistory.innerHTML = '<p class="empty-hint">尚無紀錄</p>'; return; }
+
+  const groups = {};
+  for (const l of logs) (groups[l.log_date] = groups[l.log_date] || []).push(l);
+  const dates = Object.keys(groups).sort((a, b) => b.localeCompare(a)).slice(0, 30);
+
+  logHistory.innerHTML = dates.map(date => {
+    const items = groups[date];
+    const allSets = items.flatMap(i => i.sets || []);
+    const exerciseCount = new Set(allSets.map(s => s.exercise)).size;
+    const totalSets = allSets.reduce((s, x) => s + (x.sets || 0), 0);
+    return `
+      <details class="meal-day">
+        <summary>
+          <span class="md-date">${date}</span>
+          <span class="md-stats">${exerciseCount} 動作 · ${totalSets} 組</span>
+        </summary>
+        <div class="md-body">
+          ${items.map(l => `
+            <div class="log-item" data-id="${l.id}">
+              <button class="del-log" data-id="${l.id}">刪除</button>
+              ${l.sets.map(s => `${escapeHtml(s.exercise)} ${s.sets}組×${s.reps}次 ${s.weight}kg`).join('、')}
+              ${l.note ? `<br><em>${escapeHtml(l.note)}</em>` : ''}
+              ${l.feedback ? `<details class="fb-toggle"><summary>💬 小健的回饋</summary><div class="fb-body">${escapeHtml(l.feedback)}</div></details>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      </details>
+    `;
+  }).join('');
+
   logHistory.querySelectorAll('.del-log').forEach(btn => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault(); e.stopPropagation();
       if (!confirm('確定刪除這筆紀錄？')) return;
       await fetch(`/api/workout-log/${btn.dataset.id}`, { method: 'DELETE' });
       loadHistory();
