@@ -21,7 +21,9 @@ app.use('/api', (req, res, next) => {
   if (!u) return res.status(400).json({ error: '缺裝置識別碼（請重新整理）' });
   if (u.length > 100) return res.status(400).json({ error: '識別碼太長' });
   req.user = u;
-  req.userName = (req.header('X-User-Name') || '').trim().slice(0, 30) || '朋友';
+  let raw = req.header('X-User-Name') || '';
+  try { raw = decodeURIComponent(raw); } catch {}
+  req.userName = raw.trim().slice(0, 30) || '朋友';
   next();
 });
 

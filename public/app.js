@@ -39,7 +39,7 @@ window.fetch = function(url, opts = {}) {
   if (typeof url === 'string' && url.startsWith('/api/')) {
     const headers = new Headers(opts.headers || {});
     headers.set('X-User', getUid());
-    headers.set('X-User-Name', getName() || '匿名');
+    headers.set('X-User-Name', encodeURIComponent(getName() || '匿名'));
     opts = { ...opts, headers };
   }
   return _origFetch(url, opts);
